@@ -1,12 +1,16 @@
 """
-Session store for conversational memory.
+Session store for conversational memory and per-turn metadata.
 
-Sessions and turns live in Postgres (tables `sessions` and `session_turns`).
-Each chat request can reuse an existing session_id or create a new one on first use.
+Sessions and turns live in Postgres (tables `sessions`, `session_turns`).
+Assistant turns additionally carry retrieval/gate metadata in `turn_metadata`,
+which the feedback loop uses to attribute user complaints to specific
+retrieval or generation decisions.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
@@ -54,10 +58,56 @@ def load_history(sess: Session, session_id: UUID, limit: int | None = None) -> l
     return [Turn(role=r[0], content=r[1]) for r in reversed(rows)]
 
 
-def append_turn(sess: Session, session_id: UUID, role: str, content: str) -> None:
+def append_turn(sess: Session, session_id: UUID, role: str, content: str) -> int:
+    """Insert a turn and return its id. Raises ValueError on invalid role."""
     if role not in ("user", "assistant"):
         raise ValueError(f"invalid role: {role}")
-    sess.execute(
-        text("INSERT INTO session_turns (session_id, role, content) VALUES (:sid, :role, :content)"),
+    row = sess.execute(
+        text("""
+            INSERT INTO session_turns (session_id, role, content)
+            VALUES (:sid, :role, :content)
+            RETURNING id
+        """),
         {"sid": session_id, "role": role, "content": content},
+    ).one()
+    return int(row[0])
+
+
+def save_turn_metadata(
+    sess: Session,
+    turn_id: int,
+    *,
+    search_query: str,
+    retrieved_ids: list[int],
+    retrieved_urls: list[str],
+    confident: bool,
+    confidence_score: float,
+    signals: dict[str, Any],
+) -> None:
+    """Persist the retrieval/gate decision for an assistant turn."""
+    sess.execute(
+        text("""
+            INSERT INTO turn_metadata
+                (turn_id, search_query, retrieved_ids, retrieved_urls,
+                 confident, confidence_score, signals)
+            VALUES
+                (:turn_id, :search_query, :retrieved_ids, :retrieved_urls,
+                 :confident, :confidence_score, CAST(:signals AS jsonb))
+            ON CONFLICT (turn_id) DO UPDATE SET
+                search_query = EXCLUDED.search_query,
+                retrieved_ids = EXCLUDED.retrieved_ids,
+                retrieved_urls = EXCLUDED.retrieved_urls,
+                confident = EXCLUDED.confident,
+                confidence_score = EXCLUDED.confidence_score,
+                signals = EXCLUDED.signals
+        """),
+        {
+            "turn_id": turn_id,
+            "search_query": search_query,
+            "retrieved_ids": retrieved_ids,
+            "retrieved_urls": retrieved_urls,
+            "confident": confident,
+            "confidence_score": confidence_score,
+            "signals": json.dumps(signals),
+        },
     )
