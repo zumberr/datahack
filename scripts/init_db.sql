@@ -51,37 +51,3 @@ CREATE TABLE IF NOT EXISTS session_turns (
 
 CREATE INDEX IF NOT EXISTS session_turns_session_idx
     ON session_turns (session_id, created_at);
-
--- Per-assistant-turn metadata: what was retrieved, what the gate said, which
--- reformulated query we searched with. Needed so feedback analysis can
--- attribute user complaints to specific retrieval/gate/prompt decisions.
-CREATE TABLE IF NOT EXISTS turn_metadata (
-    turn_id BIGINT PRIMARY KEY REFERENCES session_turns(id) ON DELETE CASCADE,
-    search_query TEXT,
-    retrieved_ids BIGINT[],
-    retrieved_urls TEXT[],
-    confident BOOLEAN NOT NULL,
-    confidence_score REAL,
-    signals JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- User feedback on individual assistant turns. rating drives the triage in
--- scripts/analyze_feedback.py: `missing_info` → corpus gaps,
--- `wrong` → hallucination candidates, `not_helpful`/`incomplete` → retrieval
--- or prompt tuning.
-CREATE TABLE IF NOT EXISTS feedback (
-    id BIGSERIAL PRIMARY KEY,
-    session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    turn_id BIGINT REFERENCES session_turns(id) ON DELETE SET NULL,
-    rating TEXT NOT NULL CHECK (rating IN (
-        'helpful', 'not_helpful', 'wrong', 'incomplete', 'missing_info'
-    )),
-    reason TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS feedback_rating_idx
-    ON feedback (rating, created_at DESC);
-CREATE INDEX IF NOT EXISTS feedback_turn_idx
-    ON feedback (turn_id);

@@ -14,4 +14,3 @@ data/raw/
 data/processed/
 .cache/
 .DS_Store
-.claude/

@@ -4,7 +4,6 @@ FastAPI entrypoint for BravoBot.
 Endpoints:
   POST /chat      — main RAG pipeline (reformulation → retrieval → gate → generation)
   POST /sessions  — create a new conversation session
-  POST /feedback  — user feedback on an assistant turn (closes the quality loop)
   GET  /health    — DB connectivity + LLM provider availability
 """
 from __future__ import annotations
@@ -19,13 +18,10 @@ from sqlalchemy import text
 
 from app.config import get_settings
 from app.db import db_session
-from app.feedback import FeedbackError, record_feedback
 from app.models import (
     ChatRequest,
     ChatResponse,
     Citation,
-    FeedbackRequest,
-    FeedbackResponse,
     HealthResponse,
     SessionCreateResponse,
 )
@@ -34,13 +30,7 @@ from app.rag.generator import LLMError, get_llm
 from app.rag.prompts import FALLBACK_ANSWER, SYSTEM_PROMPT, build_user_message
 from app.rag.reformulator import reformulate
 from app.rag.retriever import retrieve
-from app.sessions import (
-    append_turn,
-    create_session,
-    get_or_create_session,
-    load_history,
-    save_turn_metadata,
-)
+from app.sessions import append_turn, create_session, get_or_create_session, load_history
 
 logger = logging.getLogger("bravobot.api")
 
@@ -146,53 +136,11 @@ def chat(req: ChatRequest) -> ChatResponse:
             confident = True
 
         append_turn(sess, session_id, "user", question)
-        assistant_turn_id = append_turn(sess, session_id, "assistant", answer)
-
-        # Persist per-turn retrieval/gate metadata so /feedback can later attribute
-        # complaints to a specific decision (retrieval vs. gate vs. prompt).
-        save_turn_metadata(
-            sess,
-            assistant_turn_id,
-            search_query=search_query,
-            retrieved_ids=[c.id for c in chunks],
-            retrieved_urls=[c.url for c in chunks],
-            confident=confident,
-            confidence_score=confidence.score,
-            signals={
-                "passed": confidence.signals,
-                "details": confidence.details,
-            },
-        )
+        append_turn(sess, session_id, "assistant", answer)
 
     return ChatResponse(
         session_id=session_id,
-        turn_id=assistant_turn_id,
         answer=answer,
         citations=citations,
         confident=confident,
     )
-
-
-@app.post("/feedback", response_model=FeedbackResponse)
-def submit_feedback(req: FeedbackRequest) -> FeedbackResponse:
-    """Record user feedback on a specific assistant turn.
-
-    Ratings:
-      - helpful       — positive signal
-      - not_helpful   — "esto no respondió mi pregunta"
-      - wrong         — answer contained incorrect info (hallucination candidate)
-      - incomplete    — partially answered, user expected more detail
-      - missing_info  — bot said it didn't have the info, user disagrees (corpus gap)
-    """
-    try:
-        with db_session() as sess:
-            fb_id = record_feedback(
-                sess,
-                session_id=req.session_id,
-                turn_id=req.turn_id,
-                rating=req.rating,
-                reason=req.reason,
-            )
-    except FeedbackError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return FeedbackResponse(feedback_id=fb_id)
