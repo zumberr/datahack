@@ -18,8 +18,6 @@ Documento estructurado para que un agente (Claude Code, Cursor, Copilot, etc.) e
 | I4 | Cada respuesta del LLM debe citar con `[N]` los fragmentos usados | `SYSTEM_PROMPT` + `app/main.py:_extract_used_citations` |
 | I5 | `scripts/ingest.py` debe ser **idempotente** por `source_hash` | `scripts/ingest.py:_upsert_chunks` |
 | I6 | El gate de confianza usa **múltiples señales**, nunca un solo umbral | `app/rag/confidence.py:evaluate_confidence` |
-| I7 | Toda respuesta del `/chat` persiste su metadata (query, chunks, gate) en `turn_metadata` para que el feedback loop pueda atribuirla | `app/main.py:chat` + `app/sessions.py:save_turn_metadata` |
-| I8 | `/feedback` solo acepta `turn_id` que corresponda a un turno `assistant` de la sesión indicada | `app/feedback.py:record_feedback` |
 
 Si una modificación rompe una invariante, **detente y pregunta al usuario**.
 
@@ -30,12 +28,11 @@ Si una modificación rompe una invariante, **detente y pregunta al usuario**.
 ```
 datahack/
 ├── app/
-│   ├── main.py              ← FastAPI entrypoint (/chat, /sessions, /feedback, /health)
+│   ├── main.py              ← FastAPI entrypoint (endpoints /chat, /sessions, /health)
 │   ├── config.py            ← Settings (pydantic-settings, lee .env)
 │   ├── db.py                ← SQLAlchemy engine + db_session() context manager
 │   ├── models.py            ← Pydantic request/response models del API
-│   ├── sessions.py          ← CRUD de sessions + session_turns + turn_metadata
-│   ├── feedback.py          ← record_feedback() — valida que el turno sea del asistente
+│   ├── sessions.py          ← CRUD de sessions + session_turns (memoria conversacional)
 │   ├── ingest/
 │   │   ├── schemas.py       ← NormalizedDocument (contrato interno)
 │   │   └── normalizer.py    ← JSON crudo → NormalizedDocument limpio
@@ -50,7 +47,6 @@ datahack/
 ├── scripts/
 │   ├── init_db.sql          ← Schema de Postgres (extensions, tables, indexes)
 │   ├── ingest.py            ← CLI: carga JSON → chunks → embeddings → DB
-│   ├── analyze_feedback.py  ← CLI: exporta CSVs de triage (corpus/prompts/retrieval)
 │   └── sample_data/         ← Fixtures JSON (incluye casos sucios intencionalmente)
 ├── tests/                   ← pytest (36 tests, unit-only, no requieren DB ni LLM)
 ├── docker-compose.yml       ← Postgres 16 + pgvector
@@ -91,27 +87,8 @@ ChatRequest
        NO  → FALLBACK_ANSWER (no LLM call)
        YES → build_user_message() + MultiProviderLLM.complete()
   → _extract_used_citations()      app/main.py
-  → append_turn(user) + append_turn(assistant) → turn_id
-  → save_turn_metadata(turn_id, …)  app/sessions.py         # I7: persist gate+retrieval decision
-  → ChatResponse (incluye turn_id)
-```
-
-### 3.3 Feedback loop (`POST /feedback` → triage offline)
-
-```
-FeedbackRequest(session_id, turn_id, rating, reason)
-  → record_feedback()              app/feedback.py
-    valida que turn_id sea assistant de la sesión (I8)
-  → INSERT INTO feedback(...)
-  → FeedbackResponse(feedback_id)
-
-scripts/analyze_feedback.py
-  JOIN feedback + session_turns + turn_metadata + user-turn (LATERAL)
-  → CSVs en data/feedback/:
-      corpus_gaps.csv              ← missing_info ∪ (not_helpful ∧ ¬confident)
-      hallucination_candidates.csv ← wrong ∧ confident
-      retrieval_misses.csv         ← (not_helpful ∨ incomplete) ∧ confident
-  + gate calibration stats (confident vs. user verdict)
+  → append_turn(user) + append_turn(assistant)
+  → ChatResponse
 ```
 
 ---
@@ -138,26 +115,6 @@ documents(
 
 sessions(id UUID PK, created_at, last_active)
 session_turns(id, session_id FK, role IN ('user','assistant'), content, created_at)
-
-turn_metadata(
-  turn_id BIGINT PK FK → session_turns,    -- 1:1 con session_turns (solo assistant)
-  search_query TEXT,                       -- query ya reformulado
-  retrieved_ids BIGINT[],                  -- documents.id que se enviaron al LLM
-  retrieved_urls TEXT[],                   -- mismas URLs (denormalizado para análisis)
-  confident BOOLEAN,                       -- decisión del gate
-  confidence_score REAL,
-  signals JSONB,                           -- dict completo de confidence.signals/details
-  created_at TIMESTAMPTZ
-)
-
-feedback(
-  id BIGSERIAL PK,
-  session_id UUID FK,
-  turn_id BIGINT FK → session_turns (SET NULL on delete),
-  rating TEXT CHECK IN ('helpful','not_helpful','wrong','incomplete','missing_info'),
-  reason TEXT,
-  created_at TIMESTAMPTZ
-)
 ```
 
 **Si cambias la dimensión del modelo de embeddings**, debes editar:
@@ -215,11 +172,6 @@ uvicorn app.main:app --reload --port 8000
 # Tests (no necesitan DB ni LLM)
 pytest -q
 pytest tests/test_confidence.py -v               # módulo específico
-
-# Triage de feedback (sí necesita DB con datos de /feedback)
-python scripts/analyze_feedback.py                        # últimos datos
-python scripts/analyze_feedback.py --since 2026-04-01     # desde fecha
-python scripts/analyze_feedback.py --output-dir data/feedback
 ```
 
 > **Nota**: El contenedor Docker mapea el puerto **5433** del host al 5432 interno.
@@ -279,18 +231,7 @@ python scripts/analyze_feedback.py --output-dir data/feedback
 - Endpoints: `/chat`, `/sessions`, `/health`. Si añades uno nuevo, registra un modelo Pydantic en `app/models.py`.
 - El pipeline completo vive en la función `chat()`. Si refactorizas, mantén el orden: sesión → reformulación → retrieval → gate → generación → citaciones → append turns.
 
-### 7.8 `app/feedback.py` + `scripts/analyze_feedback.py`
-
-- **No aceptes feedback sin `turn_id` válido** (I8). `record_feedback` ya valida que el turno sea del asistente y pertenezca a la sesión — no bypasses esta verificación añadiendo un endpoint "anónimo".
-- **No añadas un nuevo rating sin actualizar tres lugares a la vez**:
-  1. `FeedbackRating` en `app/models.py`.
-  2. El `CHECK` en `scripts/init_db.sql` (tabla `feedback`).
-  3. El bucketing en `scripts/analyze_feedback.py:_bucket_rows`.
-- **Nuevos ratings deben mapearse a al menos uno de los 3 buckets** (corpus/prompts/retrieval) o dejar de serlo documentadamente (p. ej. solo para métricas, sin CSV).
-- **El script es solo lectura** de la DB — no muta `feedback` ni `turn_metadata`. Cualquier derivación se escribe a CSV para review humano antes de tocar el corpus o los umbrales.
-- **Cambios en `turn_metadata.signals`**: es JSONB porque el shape de `confidence.signals` puede evolucionar. Añadir una señal no requiere migración, pero `analyze_feedback.py` asume que existen las claves actuales al formatear — revisa `_fmt_signals` si renombras.
-
-### 7.9 `tests/`
+### 7.8 `tests/`
 
 - **Los tests actuales son unit-only**: no requieren DB, LLM ni embeddings (sentence-transformers se lazy-importa).
 - Para mantener esta propiedad: no escribas tests que hagan `embed_passages()` real ni llamadas a `retrieve()` contra Postgres. Si necesitas integración, créalos en `tests/integration/` y márcalos con `@pytest.mark.integration` (pendiente de configurar).
@@ -345,7 +286,7 @@ No modifiques código — ajusta `.env`:
 
 ## 10. Checklist antes de hacer commit
 
-- [ ] `pytest -q` pasa (51/51 mínimo, más si añadiste tests).
+- [ ] `pytest -q` pasa (41/41 mínimo, más si añadiste tests).
 - [ ] `python -c "from app.main import app"` no lanza.
 - [ ] No hay API keys hardcodeadas (solo en `.env`, nunca en código).
 - [ ] Si añadiste dependencia: está en `pyproject.toml`.

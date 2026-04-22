@@ -1,13 +1,3 @@
----
-title: BravoBot
-emoji: 🎓
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-app_port: 7860
-pinned: false
----
-
 # BravoBot
 
 **Asistente oficial de la Institución Universitaria Pascual Bravo**, disponible 24/7 para aspirantes. Responde sobre oferta académica, admisiones, costos, perfiles y beneficios usando únicamente información pública del sitio `pascualbravo.edu.co`.
@@ -88,7 +78,6 @@ Respuesta (abreviada):
 ```json
 {
   "session_id": "6d1a...",
-  "turn_id": 1234,
   "answer": "Pascual Bravo ofrece la Tecnología en Sistematización de Datos [1] y la Tecnología en Electricidad, entre otras. Ambas duran 6 semestres [1][2].",
   "citations": [
     { "id": 1, "url": "https://pascualbravo.edu.co/pregrados/tecnologia-en-sistematizacion-de-datos/", "title": "Tecnología en Sistematización de Datos", "snippet": "..." }
@@ -96,8 +85,6 @@ Respuesta (abreviada):
   "confident": true
 }
 ```
-
-> `turn_id` identifica esta respuesta del bot. El frontend lo reenvía al endpoint `/feedback` cuando el usuario marca pulgar arriba/abajo o "esto no respondió mi pregunta" (ver sección *Feedback loop* más abajo).
 
 **Pregunta fuera de dominio:** el bot no inventa.
 
@@ -235,7 +222,6 @@ El programa forma profesionales capaces de...
 // Response
 {
   "session_id": "uuid",
-  "turn_id": 1234,
   "answer": "...[1][2]",
   "citations": [
     { "id": 1, "url": "...", "title": "...", "snippet": "..." }
@@ -247,36 +233,6 @@ El programa forma profesionales capaces de...
 - Pasa `session_id: null` en el primer mensaje; guarda el UUID devuelto y reúsalo en los siguientes.
 - `confident: false` → el backend no encontró información suficientemente clara; muestra la `answer` tal cual (ya trae redirección institucional).
 - Los `[N]` en `answer` corresponden a los `id` de `citations` — úsalos para renderizar enlaces inline.
-- `turn_id` identifica esta respuesta del bot; guárdalo para enviarlo con `/feedback` cuando el usuario califique.
-
-### `POST /feedback`
-
-Cierra el loop de calidad. El usuario marca si la respuesta le sirvió; el backend persiste el juicio junto con la metadata de retrieval/gate de ese turno para triage offline.
-
-```json
-// Request
-{
-  "session_id": "uuid",
-  "turn_id": 1234,
-  "rating": "not_helpful",
-  "reason": "No mencionó el costo nocturno"
-}
-
-// Response
-{ "feedback_id": 42 }
-```
-
-Ratings aceptados:
-
-| `rating` | Cuándo mostrarlo | A quién ayuda |
-|---|---|---|
-| `helpful` | Pulgar arriba | Señal positiva (gate calibration) |
-| `not_helpful` | "Esto no respondió mi pregunta" | Retrieval / cobertura |
-| `wrong` | "Esta información es incorrecta" | Prompts (alucinación candidata) |
-| `incomplete` | "Me faltó información" | Retrieval / prompt verboso |
-| `missing_info` | El bot dijo "no tengo esa info" pero el usuario sabe que debería | Cobertura del corpus |
-
-Devuelve `404` si `turn_id` no existe, no pertenece a la sesión, o no es un turno del asistente.
 
 ### `POST /sessions`
 
@@ -316,47 +272,17 @@ Dos mecanismos combinados:
 
 ---
 
-## Feedback loop — cómo mejora el bot con cada conversación
-
-Cada respuesta del `/chat` graba en Postgres:
-
-- El turno (`session_turns`) — para la memoria conversacional.
-- La metadata del turno (`turn_metadata`): query reformulado, IDs/URLs de los chunks recuperados, decisión del gate, señales de confianza, score.
-
-Cuando el usuario envía feedback a `/feedback`, se cruza con esa metadata y `scripts/analyze_feedback.py` produce tres CSVs de triage:
-
-```bash
-python scripts/analyze_feedback.py
-python scripts/analyze_feedback.py --since 2026-04-01
-```
-
-| Archivo generado | Criterio | Destinatario | Acción |
-|---|---|---|---|
-| `data/feedback/corpus_gaps.csv` | `missing_info` ∪ (`not_helpful` ∧ `confident=false`) | Equipo de scraping | Páginas/temas que deberían estar indexadas y no lo están → agregarlas a `mappings.json` y re-ingestar |
-| `data/feedback/hallucination_candidates.csv` | `wrong` ∧ `confident=true` | Owner del prompt | El gate pasó pero el LLM alucinó → revisar `SYSTEM_PROMPT`, subir umbrales de confianza específicos |
-| `data/feedback/retrieval_misses.csv` | (`not_helpful` ∨ `incomplete`) ∧ `confident=true` | Owner del retrieval | El LLM intentó pero los chunks eran insuficientes → usar como negativos para re-ranker o para tunear RRF / chunking |
-
-El script también imprime en consola una **calibración del gate**: qué fracción de los `confident=true` el usuario marcó como útiles vs. malos, y viceversa. Si `confident=false` produce muchos `missing_info`, el gate está siendo demasiado estricto y hay que bajar `CONFIDENCE_SIGNALS_REQUIRED` o los umbrales individuales en `.env`.
-
-> **Migración**: las tablas `turn_metadata` y `feedback` están en `scripts/init_db.sql`. Si tu contenedor Postgres ya está creado, aplica el schema con:
-> ```bash
-> docker exec -i bravobot-postgres psql -U bravobot -d bravobot < scripts/init_db.sql
-> ```
-
----
-
 ## Tests
 
 ```bash
 pytest -q
 ```
 
-51 tests cubren:
+41 tests cubren:
 - Normalizador (aliases, dominio, HTML, dedupe, inferencia de categoría, canonicalización, formato real del scraper con `price_table`/`presentation`/metadata rica, construcción desde metadata sin `presentation`)
 - Chunker (secciones separadas, heading path, no fusión entre secciones)
 - Gate de confianza (preguntas on/off-domain, numéricas, comparativas)
 - Extracción de citaciones
-- Validación de modelos de feedback (ratings válidos, turn_id positivo, límite de `reason`)
 
 ---
 
@@ -373,126 +299,6 @@ pytest -q
 
 **`pip install` falla con torch en Python 3.14**
 → Usa Python 3.11 o 3.12. Torch aún no publica wheels estables para 3.14.
-
----
-
-## Desplegar en Hugging Face Spaces + Supabase (nube)
-
-El repo ya incluye todo lo necesario para desplegarse como **Space tipo Docker**:
-`Dockerfile`, `.dockerignore`, `scripts/hf_spaces_entrypoint.sh` y la metadata
-YAML al inicio de este README (`sdk: docker`, `app_port: 7860`).
-
-> HF Spaces **no ofrece Postgres**, así que la persistencia (embeddings y
-> sesiones) vive en **Supabase** — Postgres gestionado con `pgvector`
-> preinstalado, tier gratuito de 500 MB, y sin tarjeta de crédito.
-> Otras alternativas compatibles: Neon o Render, pero esta guía usa Supabase.
-
-### 1. Crear y preparar el proyecto en Supabase
-
-1. Entra a [supabase.com](https://supabase.com) → *New project*. Apunta la
-   **database password** que generes (no se puede recuperar después, solo
-   resetear).
-2. Espera a que termine el aprovisionamiento (~2 min).
-3. Activa `pgvector`: **Database → Extensions**, busca `vector` y dale
-   *Enable*. (`pgcrypto` ya viene activo; nuestro `init_db.sql` es idempotente
-   así que no hace daño si ya existen.)
-4. Copia la **Connection string** desde *Project Settings → Database →
-   Connection string → URI*. Supabase te ofrece tres modos; para HF Spaces
-   usa el **Session pooler** (contenedor de larga vida, soporta prepared
-   statements de SQLAlchemy, IPv4 compatible):
-
-   ```
-   postgresql://postgres.<PROJECT_REF>:<PASSWORD>@aws-0-<REGION>.pooler.supabase.com:5432/postgres
-   ```
-
-   Conviértelo al formato de SQLAlchemy añadiendo `+psycopg` y `sslmode=require`:
-
-   ```
-   postgresql+psycopg://postgres.<PROJECT_REF>:<PASSWORD>@aws-0-<REGION>.pooler.supabase.com:5432/postgres?sslmode=require
-   ```
-
-   > ⚠️ **No uses el Transaction pooler (puerto 6543)** con SQLAlchemy: rompe
-   > las prepared statements. El *Session pooler* (5432) o la *Direct
-   > connection* (`db.<PROJECT_REF>.supabase.co:5432`) funcionan bien.
-
-### 2. Crear el Space en Hugging Face
-
-En [huggingface.co/new-space](https://huggingface.co/new-space):
-
-- *Space SDK*: **Docker** → *Blank*
-- *Hardware*: **CPU basic** sirve para probar (el modelo de embeddings
-  `multilingual-e5-large` ocupa ~2 GB en RAM). Si lo sientes corto sube a
-  *CPU upgrade*.
-
-### 3. Subir el código
-
-```bash
-git remote add space https://huggingface.co/spaces/<tu-usuario>/<nombre-space>
-git push space main
-```
-
-### 4. Configurar los Secrets del Space
-
-En *Settings → Variables and secrets* añade como **Secrets** (no Variables,
-para no exponer tokens en logs):
-
-| Clave | Valor | Obligatorio |
-|---|---|---|
-| `DATABASE_URL` | URL del Session pooler de Supabase (ver paso 1.4) | ✅ |
-| `GROQ_API_KEY` | API key de Groq | ✅ uno |
-| `CEREBRAS_API_KEY` / `ANTHROPIC_API_KEY` | Proveedores alternativos | opcional |
-| `INGEST_ON_START` | `true` para ingerir `scripts/sample_data/` en el primer arranque | opcional |
-| `INGEST_PATH` | Ruta dentro del contenedor con tus JSON | opcional |
-| `CORS_ORIGINS` | Dominios del frontend autorizados (p.ej. `https://midominio.co`) | opcional |
-
-### 5. Esperar el build y probar
-
-- El primer arranque descarga `multilingual-e5-large` (~2 GB) y puede tardar
-  5–10 minutos. Los siguientes arranques reutilizan el caché.
-- Cuando el Space quede en *Running*, el API está en:
-
-  ```
-  https://<tu-usuario>-<nombre-space>.hf.space/docs
-  ```
-
-- Verifica: `GET /health` debe responder `{"status": "ok", "database": true, ...}`.
-
-### Cargar datos en un Space ya desplegado
-
-Como HF Spaces no te da shell interactiva, tienes tres opciones:
-
-- **Más rápido — ingestar localmente contra Supabase.** Exporta la misma
-  `DATABASE_URL` del Session pooler en tu máquina y corre:
-
-  ```bash
-  export DATABASE_URL="postgresql+psycopg://postgres.<REF>:<PASS>@aws-0-<REGION>.pooler.supabase.com:5432/postgres?sslmode=require"
-  python scripts/ingest.py scripts/sample_data/
-  ```
-
-  El ingest es idempotente (dedupe por `source_hash`), así que re-ejecutarlo
-  es seguro.
-
-- **Ingest automático al arrancar.** Sube los JSON al repo (p.ej. en
-  `scripts/sample_data/`) y configura en los Secrets
-  `INGEST_ON_START=true` e `INGEST_PATH=scripts/sample_data`. Tras el primer
-  arranque exitoso, cambia `INGEST_ON_START=false` para evitar re-ingerir
-  en cada redeploy.
-
-- **Ingest manual desde el SQL Editor de Supabase.** No recomendado para
-  cargas grandes, pero útil para inspección: *Supabase → SQL Editor* permite
-  consultar `SELECT count(*) FROM documents;` para verificar la ingesta.
-
-### Notas y límites
-
-- El filesystem del Space es **efímero** en el tier gratuito; por eso toda la
-  persistencia real vive en Supabase. El caché de modelos de HF se recrea
-  en cada redeploy (lento la primera vez).
-- **Supabase free tier** da 500 MB de almacenamiento y pausa el proyecto
-  tras 7 días sin actividad. Para producción usa tier Pro.
-- Si tu red de desarrollo no tiene IPv6, el **Session pooler** es obligatorio
-  (la Direct connection de Supabase ahora solo resuelve por IPv6).
-- El `docker-compose.yml` sigue sirviendo para desarrollo local — **no se usa**
-  en HF Spaces (Spaces solo lee el `Dockerfile`).
 
 ---
 
