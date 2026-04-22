@@ -12,6 +12,11 @@ try:
 except ImportError:
     sv = None
 
+try:
+    import pdfplumber
+except ImportError:
+    pdfplumber = None
+
 MAPPINGS_PATH = "data/mappings.json"
 DEFAULT_OUTPUT_DIR = "data/processed"
 
@@ -120,10 +125,18 @@ def parse_table(table):
     if not table:
         return None
 
-    headers = [text_or_none(th) for th in table.select("thead th")] or None
+    headers = None
+    first_row = table.select_one("tr")
+    if first_row and first_row.select("th"):
+        headers = [text_or_none(th) for th in first_row.select("th")]
+    else:
+        headers = [text_or_none(th) for th in table.select("thead th")] or None
+
     rows = []
-    for row in table.select("tbody tr"):
+    for row in table.select("tr"):
         cells = [text_or_none(td) for td in row.select("td")]
+        if not cells:
+            continue
         if headers and len(headers) == len(cells):
             rows.append(dict(zip(headers, cells)))
         else:
@@ -271,12 +284,71 @@ def scrape_grouped_listing(soup, source):
     return results
 
 
+def scrape_table_page(soup, source):
+    tables = source.get("tables", [])
+    base_url = source.get("url", "")
+    results = []
+    for t_config in tables:
+        selector = t_config.get("selector")
+        name = t_config.get("name")
+        table_id = t_config.get("id", "")
+        table_node = soup.select_one(selector)
+        if not table_node:
+            continue
+        parsed_table = parse_table(table_node)
+        if parsed_table:
+            # Use fragment to give each table a unique URL for the normalizer
+            table_url = f"{base_url}#{table_id}" if table_id else base_url
+            results.append({
+                "table_id": table_id,
+                "table_name": name,
+                "title": name,
+                "url": table_url,
+                "content": parsed_table,
+                "item_type": source.get("item_type"),
+                "category": source.get("category"),
+                "source_url": base_url,
+            })
+    return results
+
+
+def scrape_pdf_text(source):
+    if not pdfplumber:
+        raise ImportError("pdfplumber is required for pdf_text source type")
+
+    path = source.get("path")
+    if not path or not os.path.exists(path):
+        raise ValueError(f"pdf path missing or not found: {path}")
+
+    text = []
+    with pdfplumber.open(path) as pdf:
+        for page in pdf.pages:
+            extracted = page.extract_text()
+            if extracted:
+                text.append(extracted)
+
+    full_text = "\n\n".join(text)
+
+    return [{
+        "title": source.get("title", os.path.basename(path)),
+        "content": full_text,
+        "item_type": source.get("item_type"),
+        "category": source.get("category"),
+        "source_path": path,
+        "url": source.get("url"),
+    }]
+
+
 def scrape_source(source):
+    source_type = source.get("type")
+    
+    if source_type == "pdf_text":
+        return scrape_pdf_text(source)
+
     url = source.get("url")
     if not url:
         raise ValueError("source url missing")
 
-    source_type = source.get("type")
     soup = fetch_soup(url)
 
     if source_type == "accordion":
@@ -287,6 +359,8 @@ def scrape_source(source):
         return scrape_detail(soup, source)
     if source_type == "grouped_listing":
         return scrape_grouped_listing(soup, source)
+    if source_type == "table_page":
+        return scrape_table_page(soup, source)
 
     raise ValueError(f"unsupported source type: {source_type}")
 

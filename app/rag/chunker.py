@@ -163,12 +163,17 @@ def chunk_document(doc: NormalizedDocument) -> list[Chunk]:
         for piece in pieces:
             if _approx_tokens(piece) < MIN_CHUNK_TOKENS:
                 continue
+            # Prepend section heading so embeddings and search capture the section context
+            if sec.heading != doc.title:
+                enriched = f"{sec.heading}\n\n{piece}"
+            else:
+                enriched = piece
             chunks.append(Chunk(
                 url=doc.url,
                 title=doc.title,
                 category=doc.category,
                 chunk_index=idx,
-                content=piece,
+                content=enriched,
                 section_title=sec.heading,
                 heading_path=heading_path,
                 source_hash=doc.source_hash,
