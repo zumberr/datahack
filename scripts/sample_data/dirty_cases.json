@@ -1,0 +1,27 @@
+[
+  {
+    "url": "https://external-site.com/scraped-page",
+    "title": "Should be rejected — not pascualbravo.edu.co",
+    "content": "This content is from an unrelated domain and must not be ingested."
+  },
+  {
+    "url": "https://pascualbravo.edu.co/bienestar/becas/",
+    "title": "",
+    "text": "Bienestar universitario ofrece becas para estudiantes destacados. Las becas disponibles incluyen: beca de excelencia académica (100% del valor de la matrícula), beca trabajo (estudiantes que apoyan labores administrativas) y beca deportiva para deportistas activos del equipo institucional. Los requisitos incluyen promedio mínimo de 4.0 y certificación de necesidad económica."
+  },
+  {
+    "url": "https://pascualbravo.edu.co/posgrados/especializacion-gerencia/",
+    "name": "Especialización en Gerencia",
+    "body": "<p>La Especialización en Gerencia es un programa de posgrado con duración de dos semestres. Forma gerentes con visión estratégica y capacidad de liderazgo en entornos organizacionales complejos.</p><p>Perfil ocupacional: los egresados podrán desempeñarse como gerentes, directores de área o consultores empresariales en organizaciones públicas y privadas.</p>"
+  },
+  {
+    "url": "https://pascualbravo.edu.co/empty/",
+    "title": "Too short",
+    "content": "Hola"
+  },
+  {
+    "url": "https://pascualbravo.edu.co/pregrados/ingenieria-industrial/",
+    "title": "Ingeniería Industrial (duplicate)",
+    "content": "## Presentación\nIngeniería Industrial forma profesionales que optimizan procesos productivos y de servicios. Duración: 10 semestres.\n\n## Perfil ocupacional\nEl ingeniero industrial puede desempeñarse en áreas de producción, logística, calidad, recursos humanos y gestión de proyectos tanto en el sector manufacturero como en servicios.\n\n## Requisitos de admisión\nBachiller o próximo a graduarse, resultados Saber 11, formulario y pago de inscripción."
+  }
+]
