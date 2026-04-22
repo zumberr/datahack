@@ -28,10 +28,23 @@ logger = logging.getLogger("ingest")
 
 def _load_json_file(path: Path) -> list[dict[str, Any]]:
     data = json.loads(path.read_text(encoding="utf-8"))
-    if isinstance(data, dict):
-        return [data]
     if isinstance(data, list):
         return [d for d in data if isinstance(d, dict)]
+    if isinstance(data, dict):
+        # Grouped format: {"preguntas": [...], "programas": [...]}.
+        # If any value is a list of dicts, flatten them all into one list.
+        has_sublists = any(
+            isinstance(v, list) and v and isinstance(v[0], dict) for v in data.values()
+        )
+        if has_sublists:
+            out: list[dict[str, Any]] = []
+            for v in data.values():
+                if isinstance(v, list):
+                    out.extend(d for d in v if isinstance(d, dict))
+            logger.info("Flattened grouped JSON from %s (%d items)", path.name, len(out))
+            return out
+        # Single document object.
+        return [data]
     raise ValueError(f"{path}: expected object or list, got {type(data).__name__}")
 
 
