@@ -119,16 +119,76 @@ curl -X POST http://localhost:8000/chat -H "Content-Type: application/json" \
 
 ## Contrato con el equipo de scraping
 
-El scraper entrega **JSON**. El normalizador acepta variaciones comunes de nombres de campos:
+El scraper entrega **JSON**. El normalizador acepta tanto el **formato simple** (un objeto básico) como el **formato real** con metadata rica; en ambos casos el normalizador produce un `NormalizedDocument` canónico.
+
+### Aliases aceptados
 
 | Campo canónico | Aliases aceptados |
 |---|---|
-| `url` | `url`, `link`, `href`, `pageUrl`, `source` |
-| `title` | `title`, `titulo`, `heading`, `name`, `nombre` |
-| `content` | `content`, `body`, `text`, `contenido`, `html`, `markdown` |
-| `category` | `category`, `categoria`, `section`, `tipo` |
+| `url` | `url`, `link`, `href`, `pageUrl`, `page_url`, `source`, `source_url` |
+| `title` | `title`, `titulo`, `heading`, `name`, `nombre`, `program_title` |
+| `content` | `content`, `body`, `text`, `contenido`, `html`, `markdown`, `raw_text`, `presentation`, `presentacion` |
+| `category` | `category`, `categoria`, `section`, `seccion`, `tipo`, `type`, `item_type` |
 
-Formato ideal:
+Las categorías se **canonicalizan** automáticamente: `pregrados → pregrado`, `especialización → posgrado`, `becas → beneficios`, `matrícula → costos`, etc.
+
+### Formato real del scraper (recomendado)
+
+Además del cuerpo narrativo (`presentation`), el normalizador aprovecha estos campos estructurados cuando vienen:
+
+| Campo | Uso |
+|---|---|
+| `faculty` | Facultad — se inserta en `## Información general` |
+| `modalidad` | "Presencial", "Presencial y virtual", etc. |
+| `program_title` | Título otorgado ("Ingeniero(a) de Materiales") |
+| `summary` | SNIES + registro calificado |
+| `inscriptions` | Período de inscripciones → `## Inscripciones` |
+| `class_start` | Inicio de clases → `## Inscripciones` |
+| `price_table` | Array `[{Estrato, Valor}, ...]` → `## Costos de matrícula por estrato` |
+
+Ejemplo (recortado):
+
+```json
+{
+  "title": "Ingeniería de Materiales",
+  "link": "https://pascualbravo.edu.co/pregrados/ingenieria-de-materiales/",
+  "category": "pregrados",
+  "faculty": "Facultad de Ingeniería",
+  "modalidad": "Presencial - Alta Calidad",
+  "program_title": "Ingeniero (a) de Materiales",
+  "summary": "SNIES 102345 — Registro calificado vigente.",
+  "inscriptions": "Del 2 de marzo al 15 de junio de 2026",
+  "class_start": "Agosto de 2026",
+  "price_table": [
+    { "Estrato": "1", "Valor": "$1.800.000" },
+    { "Estrato": "3", "Valor": "$2.500.000" }
+  ],
+  "presentation": "El programa forma profesionales capaces de..."
+}
+```
+
+Salida (el normalizador compone automáticamente):
+
+```markdown
+## Información general
+- Título otorgado: Ingeniero (a) de Materiales
+- Facultad: Facultad de Ingeniería
+- Modalidad: Presencial - Alta Calidad
+- Información oficial: SNIES 102345 — Registro calificado vigente.
+
+## Presentación
+El programa forma profesionales capaces de...
+
+## Inscripciones
+- Período de inscripciones: Del 2 de marzo al 15 de junio de 2026
+- Inicio de clases: Agosto de 2026
+
+## Costos de matrícula por estrato
+- Estrato 1: $1.800.000
+- Estrato 3: $2.500.000
+```
+
+### Formato simple (retrocompatible)
 
 ```json
 {
@@ -139,13 +199,14 @@ Formato ideal:
 }
 ```
 
-El ingestor es tolerante:
+### Garantías del ingestor
 
-- Acepta archivo individual con un objeto o una lista, o un directorio con varios `.json`.
+- Acepta un archivo con un objeto o una lista, o un directorio con varios `.json`.
 - **Rechaza** URLs fuera de `pascualbravo.edu.co` (defensa en profundidad).
 - **Limpia** HTML crudo automáticamente.
-- **Infiere** la categoría si falta (por URL y palabras clave).
-- **Descarta** contenido vacío, muy corto o duplicado.
+- **Canonicaliza** la categoría (`pregrados` → `pregrado`) o la infiere si falta.
+- **Tolerante** con programas que no tienen `presentation`: construye el documento solo desde la metadata (inscripciones, costos, facultad…), para que sigan siendo buscables.
+- **Descarta** contenido vacío, muy corto o duplicado (por `source_hash`).
 
 ---
 
@@ -216,8 +277,8 @@ Dos mecanismos combinados:
 pytest -q
 ```
 
-28 tests cubren:
-- Normalizador (aliases, dominio, HTML, dedupe, inferencia de categoría)
+36 tests cubren:
+- Normalizador (aliases, dominio, HTML, dedupe, inferencia de categoría, canonicalización, formato real del scraper con `price_table`/`presentation`/metadata rica, construcción desde metadata sin `presentation`)
 - Chunker (secciones separadas, heading path, no fusión entre secciones)
 - Gate de confianza (preguntas on/off-domain, numéricas, comparativas)
 - Extracción de citaciones

@@ -1,0 +1,42 @@
+[
+  {
+    "title": "Ingeniería de Materiales",
+    "summary": "SNIES 102345 — Registro calificado vigente.",
+    "link": "https://pascualbravo.edu.co/pregrados/ingenieria-de-materiales/",
+    "item_type": "programa",
+    "category": "pregrados",
+    "source_url": "https://pascualbravo.edu.co/pregrados/ingenieria-de-materiales/",
+    "faculty": "Facultad de Ingeniería",
+    "modalidad": "Presencial - Alta Calidad",
+    "program_title": "Ingeniero (a) de Materiales",
+    "inscriptions": "Del 2 de marzo al 15 de junio de 2026",
+    "class_start": "Agosto de 2026",
+    "price_table": [
+      { "Estrato": "1", "Valor": "$1.800.000" },
+      { "Estrato": "2", "Valor": "$2.100.000" },
+      { "Estrato": "3", "Valor": "$2.500.000" },
+      { "Estrato": "4", "Valor": "$3.000.000" },
+      { "Estrato": "5-6", "Valor": "$3.500.000" }
+    ],
+    "presentation": "El programa de Ingeniería de Materiales forma profesionales capaces de investigar, diseñar y seleccionar materiales para aplicaciones industriales avanzadas. Duración: 10 semestres. El egresado trabaja en industrias metalmecánica, cerámica, polímeros, compuestos y en laboratorios de control de calidad."
+  },
+  {
+    "title": "Tecnología en Producción Industrial",
+    "summary": "SNIES 54231 — Registro calificado vigente.",
+    "link": "https://pascualbravo.edu.co/pregrados/tecnologia-en-produccion-industrial/",
+    "item_type": "programa",
+    "category": "pregrados",
+    "source_url": "https://pascualbravo.edu.co/pregrados/tecnologia-en-produccion-industrial/",
+    "faculty": "Facultad de Producción y Diseño",
+    "modalidad": "Presencial y virtual",
+    "program_title": "Tecnólogo (a) en Producción Industrial",
+    "inscriptions": "Del 2 de marzo al 15 de junio de 2026",
+    "class_start": "Agosto de 2026",
+    "price_table": [
+      { "Estrato": "1", "Valor": "$1.200.000" },
+      { "Estrato": "2", "Valor": "$1.400.000" },
+      { "Estrato": "3", "Valor": "$1.700.000" },
+      { "Estrato": "4", "Valor": "$2.000.000" }
+    ]
+  }
+]
