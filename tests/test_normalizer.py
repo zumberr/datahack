@@ -240,3 +240,77 @@ def test_program_title_alias_used_when_title_missing():
     assert doc is not None
     # program_title must win over the URL-segment fallback.
     assert "Ingeniero" in doc.title
+
+
+# ---------- FAQ items (question/answer) ----------
+
+def test_faq_question_answer_accepted():
+    """FAQ items from the posgrado scraper use question/answer instead of title/content."""
+    data = {
+        "question": "¿Cuál es el precio del semestre en los programas de Posgrado?",
+        "answer": (
+            "El precio para los programas de Especialización es el equivalente en "
+            "pesos colombianos a 5.5 salarios mínimos legales mensuales vigentes."
+        ),
+        "item_type": "faq",
+        "category": "posgrados",
+        "source_url": "https://pascualbravo.edu.co/posgrados/",
+    }
+    doc, _ = normalize_one(data)
+    assert doc is not None
+    assert "precio" in doc.title.lower()
+    assert "5.5 salarios" in doc.content
+    assert doc.category == "posgrado"
+
+
+def test_faq_short_answer_rejected():
+    data = {
+        "question": "¿Pregunta?",
+        "answer": "Sí.",
+        "source_url": "https://pascualbravo.edu.co/posgrados/",
+    }
+    doc, warns = normalize_one(data)
+    assert doc is None
+    assert any("too short" in w for w in warns)
+
+
+# ---------- Posgrado program metadata ----------
+
+_POSGRADO_PROGRAMA = {
+    "title": "Especialización en Big Data",
+    "link": "https://pascualbravo.edu.co/programas/especializacion-en-big-data/",
+    "category": "posgrados",
+    "source_url": "https://pascualbravo.edu.co/posgrados/",
+    "semesters": "2 semestres",
+    "program_title": "Especialista en Big data",
+    "schedule": "Jueves: 6:00 p.m. – 10:00 p.m. Viernes: 6:00 p.m. – 10:00 p.m.",
+    "cost": "$9.630.000",
+    "credits": "24",
+    "snies": "110634",
+    "registro_calificado": "014240 del 06 de agosto de 2021",
+    "vigencia": "7 años",
+    "program_overview": "Domina herramientas de análisis, visualización y modelado para liderar la era del dato.",
+}
+
+
+def test_posgrado_program_overview_is_accepted_as_content():
+    doc, _ = normalize_one(_POSGRADO_PROGRAMA)
+    assert doc is not None
+    assert "análisis" in doc.content or "visualización" in doc.content
+
+
+def test_posgrado_metadata_folded_into_content():
+    doc, _ = normalize_one(_POSGRADO_PROGRAMA)
+    assert doc is not None
+    # Posgrado details section should carry these fields
+    assert "$9.630.000" in doc.content
+    assert "2 semestres" in doc.content
+    assert "110634" in doc.content
+    assert "014240" in doc.content
+    assert "7 años" in doc.content
+
+
+def test_posgrado_category_canonicalized():
+    doc, _ = normalize_one(_POSGRADO_PROGRAMA)
+    assert doc is not None
+    assert doc.category == "posgrado"
