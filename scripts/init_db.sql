@@ -11,7 +11,12 @@ CREATE TABLE IF NOT EXISTS documents (
     heading_path TEXT,
     chunk_index INT NOT NULL,
     content TEXT NOT NULL,
-    content_tsv TSVECTOR GENERATED ALWAYS AS (to_tsvector('spanish', content)) STORED,
+    content_tsv TSVECTOR GENERATED ALWAYS AS (
+        setweight(to_tsvector('spanish', coalesce(title, '')), 'A') ||
+        setweight(to_tsvector('spanish', coalesce(category, '')), 'B') ||
+        setweight(to_tsvector('spanish', coalesce(section_title, '')), 'B') ||
+        setweight(to_tsvector('spanish', content), 'C')
+    ) STORED,
     embedding VECTOR(1024) NOT NULL,
     source_hash TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
