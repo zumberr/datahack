@@ -130,7 +130,7 @@ Fuente de verdad: `.env.example`. Leídas por `app/config.py:Settings`.
 
 | Variable | Default | Uso |
 |---|---|---|
-| `DATABASE_URL` | `postgresql+psycopg://bravobot:bravobot@localhost:5432/bravobot` | SQLAlchemy connection string |
+| `DATABASE_URL` | `postgresql+psycopg://bravobot:bravobot@localhost:5433/bravobot` | SQLAlchemy connection string (puerto 5433 para evitar conflicto con Postgres local) |
 | `GROQ_API_KEY` | — | Principal. Requerido al menos un provider. |
 | `GROQ_MODEL` | `llama-3.3-70b-versatile` | |
 | `CEREBRAS_API_KEY` | — | Fallback 1 |
@@ -156,15 +156,15 @@ python -m venv .venv && .venv/Scripts/activate   # Windows
 pip install -e ".[dev]"
 cp .env.example .env   # editar con tu key
 
-# DB
+# DB (puerto 5433 en host para evitar conflicto con Postgres local)
 docker compose up -d
 docker compose down    # stop
 docker compose down -v # wipe volume (reset completo)
 
 # Ingesta
 python scripts/ingest.py scripts/sample_data/    # smoke test
-python scripts/ingest.py data/raw/               # datos reales
-python scripts/ingest.py --verbose data/raw/     # logs por documento
+python scripts/ingest.py data/processed/               # datos reales
+python scripts/ingest.py --verbose data/processed/     # logs por documento
 
 # API
 uvicorn app.main:app --reload --port 8000
@@ -173,6 +173,10 @@ uvicorn app.main:app --reload --port 8000
 pytest -q
 pytest tests/test_confidence.py -v               # módulo específico
 ```
+
+> **Nota**: El contenedor Docker mapea el puerto **5433** del host al 5432 interno.
+> Si tienes PostgreSQL instalado localmente en el puerto 5432, esto evita conflictos.
+> Asegúrate de que `DATABASE_URL` en `.env` use el puerto `5433`.
 
 ---
 
@@ -282,7 +286,7 @@ No modifiques código — ajusta `.env`:
 
 ## 10. Checklist antes de hacer commit
 
-- [ ] `pytest -q` pasa (36/36 mínimo, más si añadiste tests).
+- [ ] `pytest -q` pasa (41/41 mínimo, más si añadiste tests).
 - [ ] `python -c "from app.main import app"` no lanza.
 - [ ] No hay API keys hardcodeadas (solo en `.env`, nunca en código).
 - [ ] Si añadiste dependencia: está en `pyproject.toml`.

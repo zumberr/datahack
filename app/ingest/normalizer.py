@@ -85,6 +85,8 @@ _CATEGORY_CANONICAL: dict[str, str] = {
     "inscripción": "admisiones",
     "costo": "costos",
     "costos": "costos",
+    "precios": "costos",
+    "precio": "costos",
     "matricula": "costos",
     "matrícula": "costos",
     "pecuniarios": "costos",
@@ -194,6 +196,29 @@ def _infer_category(url: str, title: str, content: str) -> str:
         if pattern.search(haystack):
             return cat
     return "otros"
+
+
+def _render_table_content(rows: list[dict[str, Any]], table_name: str | None = None) -> str:
+    """Convert a list of dicts (scraped table rows) into a Markdown table string.
+
+    Each dict represents one row; keys become column headers.
+    If `table_name` is provided it is prepended as a heading.
+    """
+    if not rows:
+        return ""
+    # Collect all keys preserving insertion order from first row.
+    headers: list[str] = list(rows[0].keys())
+    lines: list[str] = []
+    if table_name:
+        lines.append(f"## {table_name}")
+        lines.append("")
+    # Header row
+    lines.append("| " + " | ".join(headers) + " |")
+    lines.append("| " + " | ".join("---" for _ in headers) + " |")
+    for row in rows:
+        cells = [str(row.get(h, "")).strip() for h in headers]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
 
 
 def _format_price_table(price_table: Any) -> str | None:
@@ -383,6 +408,13 @@ def normalize_one(data: dict[str, Any]) -> tuple[NormalizedDocument | None, list
         warnings.append("title missing; inferred from URL")
 
     content_raw = _pick(data, _ALIASES_CONTENT)
+
+    # Handle table content: list of dicts from table scraper → Markdown text.
+    if isinstance(content_raw, list) and content_raw and isinstance(content_raw[0], dict):
+        table_name = data.get("table_name") or data.get("title")
+        content_raw = _render_table_content(content_raw, table_name)
+        warnings.append("table content rendered as Markdown")
+
     has_narrative = isinstance(content_raw, str) and content_raw.strip()
     has_metadata = _has_rich_metadata(data)
 
