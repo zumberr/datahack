@@ -48,7 +48,7 @@ datahack/
 │   ├── init_db.sql          ← Schema de Postgres (extensions, tables, indexes)
 │   ├── ingest.py            ← CLI: carga JSON → chunks → embeddings → DB
 │   └── sample_data/         ← Fixtures JSON (incluye casos sucios intencionalmente)
-├── tests/                   ← pytest (28 tests, unit-only, no requieren DB ni LLM)
+├── tests/                   ← pytest (36 tests, unit-only, no requieren DB ni LLM)
 ├── docker-compose.yml       ← Postgres 16 + pgvector
 ├── pyproject.toml           ← Dependencias y config de pytest/ruff
 ├── .env.example             ← Plantilla de variables
@@ -183,8 +183,11 @@ pytest tests/test_confidence.py -v               # módulo específico
 - **Antes de editar**: entiende que este módulo recibe JSON arbitrario del tercero. Es **tolerante** (`RawDocument` permite extras) pero **estricto** en salida (`NormalizedDocument` es canónico).
 - **Para añadir un alias de campo**: edítalo en las constantes `_ALIASES_*`. Los aliases se comparan case-insensitive.
 - **Para añadir una categoría**: agrégala a `_URL_CATEGORY_PATTERNS` o `_KEYWORD_CATEGORY_PATTERNS`. El orden importa (primer match gana).
+- **Categorías canónicas**: `_CATEGORY_CANONICAL` mapea plurales/variantes del scraper (`pregrados`, `especialización`, `matrícula`…) al set canónico. Si añades una nueva etiqueta que pueda venir del scraper, agrégala al dict.
+- **Metadata enriquecida**: cuando el scraper entrega campos como `faculty`, `modalidad`, `program_title`, `inscriptions`, `class_start`, `price_table`, `summary`, el normalizador construye secciones Markdown deterministas (`## Información general`, `## Presentación`, `## Inscripciones`, `## Costos de matrícula por estrato`). Esto permite que el chunker jerárquico las separe y que el retriever las encuentre sin tocar código extra.
+- **Documentos sin presentación**: si `presentation`/`content` viene vacío pero hay metadata rica, se construye el documento solo a partir de la metadata (ver test `test_missing_presentation_but_rich_metadata_builds_content`). No lo rechaces — ese caso existe en el dump real (ej. *Tecnología en Producción Industrial*).
 - **No bypassees `_is_allowed_url`** — es la defensa de dominio (I2).
-- Casos sucios de prueba: `scripts/sample_data/dirty_cases.json`.
+- Casos sucios de prueba: `scripts/sample_data/dirty_cases.json`; ejemplos del scraper real: `scripts/sample_data/real_scraper_pregrados.json`.
 
 ### 7.2 `app/rag/chunker.py`
 
@@ -279,7 +282,7 @@ No modifiques código — ajusta `.env`:
 
 ## 10. Checklist antes de hacer commit
 
-- [ ] `pytest -q` pasa (28/28 mínimo, más si añadiste tests).
+- [ ] `pytest -q` pasa (36/36 mínimo, más si añadiste tests).
 - [ ] `python -c "from app.main import app"` no lanza.
 - [ ] No hay API keys hardcodeadas (solo en `.env`, nunca en código).
 - [ ] Si añadiste dependencia: está en `pyproject.toml`.

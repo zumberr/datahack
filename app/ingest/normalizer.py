@@ -2,11 +2,19 @@
 Normalizer — transforms messy third-party JSON into clean NormalizedDocument.
 
 Handles:
-- Field aliases (url/link/href, title/titulo/heading, content/body/text/html, category/tipo)
+- Field aliases (url/link/href, title/titulo/heading, content/body/text/html/presentation, category/tipo)
+- Category canonicalization (pregrados→pregrado, posgrados→posgrado, etc.)
 - Domain validation (only pascualbravo.edu.co)
 - HTML stripping when content looks like HTML
 - Unicode normalization + control char removal
 - Whitespace collapsing
+- Rich metadata enrichment: when scraper provides structured fields (faculty,
+  modalidad, program_title, inscriptions, class_start, price_table, summary),
+  they are folded into the document content as Markdown sections so the chunker
+  and retriever can use them directly.
+- Fallback build-from-metadata: if `presentation`/`content` is missing but rich
+  metadata is present, a synthetic document is built so the program is still
+  searchable (e.g. Tecnología en Producción Industrial in the real dump).
 - Empty/too-short content rejection
 - Duplicate detection via content hash
 - Category inference from URL path + keyword heuristics when missing
@@ -24,10 +32,14 @@ from selectolax.parser import HTMLParser
 
 from app.ingest.schemas import NormalizedDocument
 
-_ALIASES_URL = ("url", "link", "href", "pageUrl", "page_url", "source")
-_ALIASES_TITLE = ("title", "titulo", "heading", "name", "nombre")
-_ALIASES_CONTENT = ("content", "body", "text", "contenido", "html", "raw_text", "markdown")
-_ALIASES_CATEGORY = ("category", "categoria", "section", "seccion", "tipo", "type")
+_ALIASES_URL = ("url", "link", "href", "pageUrl", "page_url", "source", "source_url")
+_ALIASES_TITLE = ("title", "titulo", "heading", "name", "nombre", "program_title")
+# `presentation` is the real scraper's main body field; keep it alongside classic aliases.
+_ALIASES_CONTENT = (
+    "content", "body", "text", "contenido", "html", "raw_text", "markdown",
+    "presentation", "presentacion",
+)
+_ALIASES_CATEGORY = ("category", "categoria", "section", "seccion", "tipo", "type", "item_type")
 
 _ALLOWED_HOST_SUFFIX = "pascualbravo.edu.co"
 _MIN_CONTENT_LEN = 80
@@ -35,6 +47,52 @@ _CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _MULTI_WHITESPACE_RE = re.compile(r"[ \t]+")
 _MULTI_NEWLINE_RE = re.compile(r"\n{3,}")
 _HTML_TAG_HINT_RE = re.compile(r"<(p|div|span|a|ul|li|h[1-6]|table|img|br|article|section)\b", re.I)
+
+# Canonical category values the rest of the pipeline expects.
+# Everything plural / alias → singular canonical form.
+_CATEGORY_CANONICAL: dict[str, str] = {
+    "pregrado": "pregrado",
+    "pregrados": "pregrado",
+    "programa": "pregrado",
+    "programas": "pregrado",
+    "tecnologia": "pregrado",
+    "tecnologias": "pregrado",
+    "tecnología": "pregrado",
+    "tecnologías": "pregrado",
+    "ingenieria": "pregrado",
+    "ingenierias": "pregrado",
+    "ingeniería": "pregrado",
+    "ingenierías": "pregrado",
+    "posgrado": "posgrado",
+    "posgrados": "posgrado",
+    "especializacion": "posgrado",
+    "especializaciones": "posgrado",
+    "especialización": "posgrado",
+    "especializaciónes": "posgrado",
+    "maestria": "posgrado",
+    "maestrias": "posgrado",
+    "maestría": "posgrado",
+    "maestrías": "posgrado",
+    "admision": "admisiones",
+    "admisiones": "admisiones",
+    "admisión": "admisiones",
+    "inscripcion": "admisiones",
+    "inscripciones": "admisiones",
+    "inscripción": "admisiones",
+    "costo": "costos",
+    "costos": "costos",
+    "matricula": "costos",
+    "matrícula": "costos",
+    "pecuniarios": "costos",
+    "beneficio": "beneficios",
+    "beneficios": "beneficios",
+    "beca": "beneficios",
+    "becas": "beneficios",
+    "bienestar": "beneficios",
+    "perfil": "perfiles",
+    "perfiles": "perfiles",
+    "otros": "otros",
+}
 
 # URL path → category mapping (first match wins; order matters)
 _URL_CATEGORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
@@ -56,6 +114,12 @@ _KEYWORD_CATEGORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bperfil ocupacional|\bperfil profesional|\begresad", re.I), "perfiles"),
     (re.compile(r"\bbeca\b|\bbienestar|\bbeneficio\b|\bsubsidio", re.I), "beneficios"),
 ]
+
+# Fields that trigger the rich-metadata enrichment path.
+_METADATA_KEYS_FOR_RICH_CONTENT = (
+    "summary", "faculty", "modalidad", "program_title",
+    "inscriptions", "class_start", "price_table",
+)
 
 
 def _pick(data: dict[str, Any], aliases: Iterable[str]) -> Any | None:
@@ -101,6 +165,19 @@ def _is_allowed_url(url: str) -> bool:
     return host == _ALLOWED_HOST_SUFFIX or host.endswith("." + _ALLOWED_HOST_SUFFIX)
 
 
+def _canonicalize_category(raw: str) -> str | None:
+    """Map any scraper variant to the canonical set used by the retriever/prompts.
+
+    Returns None if the value is not recognized so the caller can fall back to inference.
+    """
+    if not raw:
+        return None
+    key = raw.strip().lower()
+    # Keep accents and strip trailing punctuation/whitespace only.
+    key = key.rstrip(".,;: ")
+    return _CATEGORY_CANONICAL.get(key)
+
+
 def _infer_category(url: str, title: str, content: str) -> str:
     for pattern, cat in _URL_CATEGORY_PATTERNS:
         if pattern.search(url):
@@ -110,6 +187,125 @@ def _infer_category(url: str, title: str, content: str) -> str:
         if pattern.search(haystack):
             return cat
     return "otros"
+
+
+def _format_price_table(price_table: Any) -> str | None:
+    """Render the scraper's price_table (list of {Estrato, Valor}) as Markdown.
+
+    Returns None if the input is unusable. Price values are echoed verbatim so the
+    retriever can match on the exact formatting ("$2.500.000", "$ 1.800.000") that
+    the LLM will later cite.
+    """
+    if not isinstance(price_table, list) or not price_table:
+        return None
+    lines: list[str] = []
+    for entry in price_table:
+        if not isinstance(entry, dict):
+            continue
+        # Keys from real scraper: "Estrato" / "Valor". Be forgiving with case.
+        lowered = {str(k).lower(): v for k, v in entry.items()}
+        estrato = lowered.get("estrato") or lowered.get("tier") or lowered.get("nivel")
+        valor = lowered.get("valor") or lowered.get("price") or lowered.get("precio")
+        if estrato is None and valor is None:
+            continue
+        estrato_txt = str(estrato).strip() if estrato is not None else "Sin estrato"
+        valor_txt = str(valor).strip() if valor is not None else "Sin valor"
+        lines.append(f"- Estrato {estrato_txt}: {valor_txt}")
+    if not lines:
+        return None
+    return "\n".join(lines)
+
+
+def _build_general_info_section(data: dict[str, Any]) -> str | None:
+    """`## Información general` — program_title, faculty, modalidad, SNIES/summary."""
+    program_title = _pick(data, ("program_title",))
+    faculty = _pick(data, ("faculty", "facultad"))
+    modalidad = _pick(data, ("modalidad", "modality", "modalidades"))
+    summary = _pick(data, ("summary", "resumen"))
+
+    bits: list[str] = []
+    if isinstance(program_title, str) and program_title.strip():
+        bits.append(f"- Título otorgado: {program_title.strip()}")
+    if isinstance(faculty, str) and faculty.strip():
+        bits.append(f"- Facultad: {faculty.strip()}")
+    if isinstance(modalidad, str) and modalidad.strip():
+        bits.append(f"- Modalidad: {modalidad.strip()}")
+    if isinstance(summary, str) and summary.strip():
+        # summary usually carries the SNIES + registro calificado blurb.
+        bits.append(f"- Información oficial: {summary.strip()}")
+
+    if not bits:
+        return None
+    return "## Información general\n" + "\n".join(bits)
+
+
+def _build_inscriptions_section(data: dict[str, Any]) -> str | None:
+    """`## Inscripciones` — inscription window + class start date."""
+    inscriptions = _pick(data, ("inscriptions", "inscripciones"))
+    class_start = _pick(data, ("class_start", "inicio_clases", "inicio_de_clases"))
+
+    bits: list[str] = []
+    if isinstance(inscriptions, str) and inscriptions.strip():
+        bits.append(f"- Período de inscripciones: {inscriptions.strip()}")
+    if isinstance(class_start, str) and class_start.strip():
+        bits.append(f"- Inicio de clases: {class_start.strip()}")
+
+    if not bits:
+        return None
+    return "## Inscripciones\n" + "\n".join(bits)
+
+
+def _build_costs_section(data: dict[str, Any]) -> str | None:
+    """`## Costos de matrícula por estrato` — rendered from the price_table array."""
+    price_table = _pick(data, ("price_table", "precios", "costos"))
+    rendered = _format_price_table(price_table)
+    if not rendered:
+        return None
+    return "## Costos de matrícula por estrato\n" + rendered
+
+
+def _enrich_content_with_metadata(base_content: str | None, data: dict[str, Any]) -> str:
+    """Compose a document from rich scraper metadata + optional narrative body.
+
+    Output is deterministic Markdown that the hierarchical chunker can split cleanly:
+      ## Información general  (program_title, faculty, modalidad, SNIES)
+      ## Presentación         (the narrative body, when present)
+      ## Inscripciones        (inscription window + class start)
+      ## Costos de matrícula por estrato   (from price_table)
+
+    If `base_content` already opens with a Markdown heading (e.g. doc already curated),
+    it is placed under `## Presentación` only if it is plain prose; otherwise we keep it
+    as-is to avoid double-wrapping.
+    """
+    sections: list[str] = []
+
+    general = _build_general_info_section(data)
+    if general:
+        sections.append(general)
+
+    if isinstance(base_content, str) and base_content.strip():
+        stripped = base_content.strip()
+        # If the scraper body already has its own headings, just append it raw so
+        # the chunker sees the original hierarchy. Otherwise wrap as Presentación.
+        if stripped.startswith("#"):
+            sections.append(stripped)
+        else:
+            sections.append("## Presentación\n" + stripped)
+
+    inscriptions = _build_inscriptions_section(data)
+    if inscriptions:
+        sections.append(inscriptions)
+
+    costs = _build_costs_section(data)
+    if costs:
+        sections.append(costs)
+
+    return "\n\n".join(sections).strip()
+
+
+def _has_rich_metadata(data: dict[str, Any]) -> bool:
+    """True when any of the scraper's structured fields are present and non-empty."""
+    return _pick(data, _METADATA_KEYS_FOR_RICH_CONTENT) is not None
 
 
 def _content_hash(url: str, content: str) -> str:
@@ -141,23 +337,53 @@ def normalize_one(data: dict[str, Any]) -> tuple[NormalizedDocument | None, list
         warnings.append("title missing; inferred from URL")
 
     content_raw = _pick(data, _ALIASES_CONTENT)
-    if not isinstance(content_raw, str) or not content_raw.strip():
+    has_narrative = isinstance(content_raw, str) and content_raw.strip()
+    has_metadata = _has_rich_metadata(data)
+
+    if not has_narrative and not has_metadata:
         return None, ["rejected: missing content"]
 
-    if _looks_like_html(content_raw):
-        content = _strip_html(content_raw)
-        warnings.append("html stripped")
-    else:
-        content = content_raw
+    # Step 1: turn the narrative body (if any) into clean plain/markdown text.
+    narrative_clean: str | None = None
+    if has_narrative:
+        if _looks_like_html(content_raw):
+            narrative_clean = _strip_html(content_raw)
+            warnings.append("html stripped")
+        else:
+            narrative_clean = content_raw
+        narrative_clean = _clean_text(narrative_clean)
 
-    content = _clean_text(content)
+    # Step 2: merge metadata sections around the narrative (always when metadata
+    # is available, so costs/inscription dates are searchable even when the body
+    # doesn't mention them).
+    if has_metadata:
+        content = _enrich_content_with_metadata(narrative_clean, data)
+        content = _clean_text(content)
+        if not has_narrative:
+            warnings.append("content built from metadata (no presentation/body)")
+        else:
+            warnings.append("content enriched with scraper metadata")
+    else:
+        content = narrative_clean or ""
 
     if len(content) < _MIN_CONTENT_LEN:
         return None, [f"rejected: content too short ({len(content)} chars)"]
 
     category_raw = _pick(data, _ALIASES_CATEGORY)
+    category: str | None = None
     if isinstance(category_raw, str) and category_raw.strip():
-        category = category_raw.strip().lower()
+        canonical = _canonicalize_category(category_raw)
+        if canonical:
+            category = canonical
+            if canonical != category_raw.strip().lower():
+                warnings.append(f"category canonicalized: '{category_raw}' → '{canonical}'")
+        else:
+            # Unknown literal — try inference, but keep the raw as a last resort so we
+            # don't lose information.
+            category = _infer_category(url, title, content)
+            warnings.append(
+                f"category '{category_raw}' not in canonical map; inferred as '{category}'"
+            )
     else:
         category = _infer_category(url, title, content)
         warnings.append(f"category inferred as '{category}'")
