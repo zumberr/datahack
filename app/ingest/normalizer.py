@@ -33,11 +33,12 @@ from selectolax.parser import HTMLParser
 from app.ingest.schemas import NormalizedDocument
 
 _ALIASES_URL = ("url", "link", "href", "pageUrl", "page_url", "source", "source_url")
-_ALIASES_TITLE = ("title", "titulo", "heading", "name", "nombre", "program_title")
+_ALIASES_TITLE = ("title", "titulo", "heading", "name", "nombre", "program_title", "question")
 # `presentation` is the real scraper's main body field; keep it alongside classic aliases.
+# `answer` covers FAQ items; `program_overview` covers posgrado program descriptions.
 _ALIASES_CONTENT = (
     "content", "body", "text", "contenido", "html", "raw_text", "markdown",
-    "presentation", "presentacion",
+    "presentation", "presentacion", "answer", "program_overview",
 )
 _ALIASES_CATEGORY = ("category", "categoria", "section", "seccion", "tipo", "type", "item_type")
 
@@ -73,6 +74,9 @@ _CATEGORY_CANONICAL: dict[str, str] = {
     "maestrias": "posgrado",
     "maestría": "posgrado",
     "maestrías": "posgrado",
+    "doctorado": "posgrado",
+    "doctorados": "posgrado",
+    "faq": "otros",
     "admision": "admisiones",
     "admisiones": "admisiones",
     "admisión": "admisiones",
@@ -81,6 +85,8 @@ _CATEGORY_CANONICAL: dict[str, str] = {
     "inscripción": "admisiones",
     "costo": "costos",
     "costos": "costos",
+    "precios": "costos",
+    "precio": "costos",
     "matricula": "costos",
     "matrícula": "costos",
     "pecuniarios": "costos",
@@ -119,6 +125,9 @@ _KEYWORD_CATEGORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 _METADATA_KEYS_FOR_RICH_CONTENT = (
     "summary", "faculty", "modalidad", "program_title",
     "inscriptions", "class_start", "price_table",
+    # Posgrado-specific fields from the scraper:
+    "cost", "schedule", "credits", "snies", "registro_calificado",
+    "vigencia", "semesters", "program_heading", "program_overview",
 )
 
 
@@ -187,6 +196,29 @@ def _infer_category(url: str, title: str, content: str) -> str:
         if pattern.search(haystack):
             return cat
     return "otros"
+
+
+def _render_table_content(rows: list[dict[str, Any]], table_name: str | None = None) -> str:
+    """Convert a list of dicts (scraped table rows) into a Markdown table string.
+
+    Each dict represents one row; keys become column headers.
+    If `table_name` is provided it is prepended as a heading.
+    """
+    if not rows:
+        return ""
+    # Collect all keys preserving insertion order from first row.
+    headers: list[str] = list(rows[0].keys())
+    lines: list[str] = []
+    if table_name:
+        lines.append(f"## {table_name}")
+        lines.append("")
+    # Header row
+    lines.append("| " + " | ".join(headers) + " |")
+    lines.append("| " + " | ".join("---" for _ in headers) + " |")
+    for row in rows:
+        cells = [str(row.get(h, "")).strip() for h in headers]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
 
 
 def _format_price_table(price_table: Any) -> str | None:
@@ -264,6 +296,41 @@ def _build_costs_section(data: dict[str, Any]) -> str | None:
     return "## Costos de matrícula por estrato\n" + rendered
 
 
+def _build_posgrado_details_section(data: dict[str, Any]) -> str | None:
+    """Build `## Detalles del programa` for posgrado-specific metadata.
+
+    Covers fields exclusive to the posgrado scraper: cost, schedule, credits,
+    snies, registro_calificado, vigencia, semesters.
+    """
+    cost = _pick(data, ("cost", "costo"))
+    schedule = _pick(data, ("schedule", "horario"))
+    credits_ = _pick(data, ("credits", "creditos", "créditos"))
+    snies = _pick(data, ("snies",))
+    registro = _pick(data, ("registro_calificado",))
+    vigencia = _pick(data, ("vigencia",))
+    semesters = _pick(data, ("semesters", "semestres", "duracion", "duración"))
+
+    bits: list[str] = []
+    if isinstance(semesters, str) and semesters.strip():
+        bits.append(f"- Duración: {semesters.strip()}")
+    if isinstance(cost, str) and cost.strip():
+        bits.append(f"- Costo: {cost.strip()}")
+    if isinstance(schedule, str) and schedule.strip():
+        bits.append(f"- Horario: {schedule.strip()}")
+    if isinstance(credits_, (str, int)) and str(credits_).strip():
+        bits.append(f"- Créditos: {str(credits_).strip()}")
+    if isinstance(snies, (str, int)) and str(snies).strip():
+        bits.append(f"- Código SNIES: {str(snies).strip()}")
+    if isinstance(registro, str) and registro.strip():
+        bits.append(f"- Registro calificado: {registro.strip()}")
+    if isinstance(vigencia, str) and vigencia.strip():
+        bits.append(f"- Vigencia: {vigencia.strip()}")
+
+    if not bits:
+        return None
+    return "## Detalles del programa\n" + "\n".join(bits)
+
+
 def _enrich_content_with_metadata(base_content: str | None, data: dict[str, Any]) -> str:
     """Compose a document from rich scraper metadata + optional narrative body.
 
@@ -291,6 +358,10 @@ def _enrich_content_with_metadata(base_content: str | None, data: dict[str, Any]
             sections.append(stripped)
         else:
             sections.append("## Presentación\n" + stripped)
+
+    posgrado_details = _build_posgrado_details_section(data)
+    if posgrado_details:
+        sections.append(posgrado_details)
 
     inscriptions = _build_inscriptions_section(data)
     if inscriptions:
@@ -337,6 +408,13 @@ def normalize_one(data: dict[str, Any]) -> tuple[NormalizedDocument | None, list
         warnings.append("title missing; inferred from URL")
 
     content_raw = _pick(data, _ALIASES_CONTENT)
+
+    # Handle table content: list of dicts from table scraper → Markdown text.
+    if isinstance(content_raw, list) and content_raw and isinstance(content_raw[0], dict):
+        table_name = data.get("table_name") or data.get("title")
+        content_raw = _render_table_content(content_raw, table_name)
+        warnings.append("table content rendered as Markdown")
+
     has_narrative = isinstance(content_raw, str) and content_raw.strip()
     has_metadata = _has_rich_metadata(data)
 

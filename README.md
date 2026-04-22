@@ -49,6 +49,7 @@ cp .env.example .env
 # Abre .env y pega tu GROQ_API_KEY
 
 # 4. Levantar PostgreSQL con pgvector (schema se crea automáticamente)
+# El contenedor usa el puerto 5433 para evitar conflicto con Postgres local
 docker compose up -d
 
 # 5. Cargar datos de ejemplo (o los del equipo de scraping)
@@ -277,7 +278,7 @@ Dos mecanismos combinados:
 pytest -q
 ```
 
-36 tests cubren:
+41 tests cubren:
 - Normalizador (aliases, dominio, HTML, dedupe, inferencia de categoría, canonicalización, formato real del scraper con `price_table`/`presentation`/metadata rica, construcción desde metadata sin `presentation`)
 - Chunker (secciones separadas, heading path, no fusión entre secciones)
 - Gate de confianza (preguntas on/off-domain, numéricas, comparativas)
@@ -293,8 +294,8 @@ pytest -q
 **El modelo de embeddings tarda mucho la primera vez**
 → `sentence-transformers` descarga `multilingual-e5-large` (~2GB) en el primer `ingest.py`. Después queda en caché.
 
-**Docker no arranca Postgres**
-→ Revisa si el puerto 5432 ya está ocupado. Edita `docker-compose.yml` si necesitas cambiarlo.
+**Docker no arranca Postgres / "password authentication failed for user bravobot"**
+→ Es probable que tengas PostgreSQL instalado localmente en el puerto 5432 y esté interceptando las conexiones antes de llegar al contenedor Docker. El proyecto ya viene configurado para usar el puerto **5433** en el host (`docker-compose.yml: "5433:5432"`). Verifica que tu `.env` tenga `DATABASE_URL=postgresql+psycopg://bravobot:bravobot@localhost:5433/bravobot`. Si necesitas otro puerto, edita ambos archivos (`docker-compose.yml` y `.env`).
 
 **`pip install` falla con torch en Python 3.14**
 → Usa Python 3.11 o 3.12. Torch aún no publica wheels estables para 3.14.
