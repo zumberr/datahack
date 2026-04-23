@@ -46,7 +46,7 @@ fi
 if [ "${INGEST_ON_START}" = "true" ]; then
   if [ -e "${INGEST_PATH}" ]; then
     echo "[entrypoint] Ejecutando ingest desde ${INGEST_PATH}…"
-    python scripts/ingest.py "${INGEST_PATH}"
+    PYTHONPATH="$(pwd):${PYTHONPATH:-}" python scripts/ingest.py "${INGEST_PATH}"
   else
     echo "[entrypoint] INGEST_ON_START=true pero ${INGEST_PATH} no existe. Se omite."
   fi
