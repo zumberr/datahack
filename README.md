@@ -1,3 +1,14 @@
+---
+title: BravoBot
+emoji: "\U0001F393"
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+short_description: "Asistente RAG del Pascual Bravo (FastAPI + pgvector)"
+---
+
 # BravoBot
 
 **Asistente oficial de la Institución Universitaria Pascual Bravo**, disponible 24/7 para aspirantes. Responde sobre oferta académica, admisiones, costos, perfiles y beneficios usando únicamente información pública del sitio `pascualbravo.edu.co`.
