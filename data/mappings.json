@@ -132,8 +132,33 @@
             "label": "Inicio de clases",
             "field": "class_start"
           }
-        ]
+        ],
+        "inline_labels": {
+          "selector": "strong",
+          "fields": [
+            {
+              "label": "Vigencia",
+              "field": "vigencia"
+            },
+            {
+              "label": "credit",
+              "field": "creditos"
+            },
+            {
+              "label": "duraci",
+              "field": "duracion"
+            }
+          ]
+        }
       }
+    },
+    {
+      "id": "inscripciones_requisitos",
+      "category": "inscripciones",
+      "type": "static_text",
+      "url": "https://pascualbravo.edu.co/inscripciones/#requisitos",
+      "title": "Requisitos de Inscripción para Aspirantes",
+      "content": "## ASPIRANTE POR PRIMERA VEZ\n\n**Formulario de inscripción:** Del 2 de marzo hasta el 15 de junio del 2026.\n\n### Requisitos:\n\n**Anexar en PDF:**\n- Acreditar condición de bachiller, diploma o acta de grado (si es extranjero debe estar apostillado).\n- Adjuntar constancia de los resultados de las pruebas de Estado (ICFES saber 11). (Ley 1324 del 13 de julio del 2009 artículo 7).\n- Documento de identidad por ambos lados legibles en una sola hoja, (si es extranjero debe anexar visa o pasaporte).\n- Última factura de servicios públicos, con ambos lados legibles, donde se pueda visualizar el estrato.\n- Certificado de la categoría del SISBÉN.\n\n**RECUERDE QUE TENER SISBEN ES DE CARÁCTER OBLIGATORIO PARA QUE SU INSCRIPCIÓN SEA VÁLIDA.**\n\n**Anexar en formato JPG:**\n- Foto reciente a color 3x4, fondo blanco **tipo documento**, Resolución mínima de 200 dpi; el archivo debe estar guardado con el número de la cédula sin puntos, ni guiones o espacios. Por ejemplo: 50478351.jpg\n\n### Nota importante:\n\nDe acuerdo a los documentos exigidos por la institución, si no sube la documentación completa y la foto exacta al formulario, su inscripción no podrá entrar al proceso de selección y admisión (tener en cuenta que el formulario se debe diligenciar completo, sin salirse de la página, si lo hace debe iniciar nuevamente su proceso de inscripción).\n\nRes. 471 del 23 de julio 2015 cap. 2, art 3. **El pago por inscripción no será reembolsable.**\n\nEl listado de admitidos se publicará en la página web institucional www.pascualbravo.edu.co el día 24 de junio del 2026.\n\nActualizado el 25 de febrero del 2026."
     },
     {
       "id": "inscripciones",
@@ -168,6 +193,19 @@
           "id": "bdt-table-2de9e8f",
           "name": "Derechos pecuniarios - Otros valores",
           "selector": "#bdt-table-2de9e8f table"
+        }
+      ]
+    },
+    {
+      "id": "calendario",
+      "category": "calendario",
+      "type": "calendar_page",
+      "url": "https://pascualbravo.edu.co/calendario-academico-2026-1/",
+      "tables": [
+        {
+          "id": "calendario-academico",
+          "name": "Calendario Académico",
+          "selector": ".pp-table-container table.pp-table"
         }
       ]
     }

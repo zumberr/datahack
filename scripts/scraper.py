@@ -291,24 +291,101 @@ def scrape_table_page(soup, source):
     for t_config in tables:
         selector = t_config.get("selector")
         name = t_config.get("name")
-        table_id = t_config.get("id", "")
-        table_node = soup.select_one(selector)
-        if not table_node:
-            continue
-        parsed_table = parse_table(table_node)
-        if parsed_table:
-            # Use fragment to give each table a unique URL for the normalizer
-            table_url = f"{base_url}#{table_id}" if table_id else base_url
-            results.append({
-                "table_id": table_id,
-                "table_name": name,
-                "title": name,
-                "url": table_url,
-                "content": parsed_table,
-                "item_type": source.get("item_type"),
-                "category": source.get("category"),
-                "source_url": base_url,
-            })
+        base_table_id = t_config.get("id", "")
+        
+        table_nodes = soup.select(selector)
+        for i, table_node in enumerate(table_nodes):
+            parsed_table = parse_table(table_node)
+            if parsed_table:
+                # Append index if multiple tables to keep fragment unique
+                table_id = f"{base_table_id}-{i}" if len(table_nodes) > 1 and base_table_id else base_table_id
+                # Use fragment to give each table a unique URL for the normalizer
+                table_url = f"{base_url}#{table_id}" if table_id else base_url
+                results.append({
+                    "table_id": table_id,
+                    "table_name": name,
+                    "title": name,
+                    "url": table_url,
+                    "content": parsed_table,
+                    "item_type": source.get("item_type"),
+                    "category": source.get("category"),
+                    "source_url": base_url,
+                })
+    return results
+
+
+def scrape_calendar_page(soup, source):
+    tables = source.get("tables", [])
+    base_url = source.get("url", "")
+    results = []
+    
+    for t_config in tables:
+        selector = t_config.get("selector")
+        name = t_config.get("name")
+        base_table_id = t_config.get("id", "")
+        
+        table_nodes = soup.select(selector)
+        for i, table_node in enumerate(table_nodes):
+            rows = table_node.find_all("tr")
+            if not rows:
+                continue
+            
+            grid = []
+            for r_idx, row in enumerate(rows):
+                cells = row.find_all(["td", "th"])
+                col_idx = 0
+                for cell in cells:
+                    while len(grid) > r_idx and len(grid[r_idx]) > col_idx and grid[r_idx][col_idx] is not None:
+                        col_idx += 1
+                    
+                    rowspan = int(cell.get("rowspan", 1))
+                    colspan = int(cell.get("colspan", 1))
+                    text = text_or_none(cell)
+                    
+                    for r in range(r_idx, r_idx + rowspan):
+                        while len(grid) <= r:
+                            grid.append([])
+                        for c in range(col_idx, col_idx + colspan):
+                            while len(grid[r]) <= c:
+                                grid[r].append(None)
+                            grid[r][c] = text
+                    col_idx += colspan
+
+            # Extract data
+            content = []
+            for r_idx, row_data in enumerate(grid):
+                if not row_data or len(row_data) < 4:
+                    continue
+                # Skip header rows
+                if "Actividad" in row_data[0] or "Actividad" in row_data[1]:
+                    continue
+                
+                proceso = row_data[0]
+                actividad = row_data[1]
+                inicio = row_data[2]
+                finalizacion = row_data[3]
+                
+                if proceso and actividad:
+                    content.append({
+                        "Proceso": proceso,
+                        "Actividad": actividad,
+                        "Inicio": inicio,
+                        "Finalización": finalizacion
+                    })
+
+            if content:
+                table_id = f"{base_table_id}-{i}" if len(table_nodes) > 1 and base_table_id else base_table_id
+                table_url = f"{base_url}#{table_id}" if table_id else base_url
+                results.append({
+                    "table_id": table_id,
+                    "table_name": name,
+                    "title": name,
+                    "url": table_url,
+                    "content": content,
+                    "item_type": source.get("item_type"),
+                    "category": source.get("category"),
+                    "source_url": base_url,
+                })
     return results
 
 
@@ -339,11 +416,27 @@ def scrape_pdf_text(source):
     }]
 
 
+def scrape_static_text(source):
+    content = source.get("content")
+    if not content:
+        raise ValueError("static_text source requires a 'content' field")
+
+    return [{
+        "title": source.get("title", "Contenido estático"),
+        "content": content,
+        "item_type": source.get("item_type"),
+        "category": source.get("category"),
+        "url": source.get("url"),
+    }]
+
+
 def scrape_source(source):
     source_type = source.get("type")
     
     if source_type == "pdf_text":
         return scrape_pdf_text(source)
+    if source_type == "static_text":
+        return scrape_static_text(source)
 
     url = source.get("url")
     if not url:
@@ -361,6 +454,8 @@ def scrape_source(source):
         return scrape_grouped_listing(soup, source)
     if source_type == "table_page":
         return scrape_table_page(soup, source)
+    if source_type == "calendar_page":
+        return scrape_calendar_page(soup, source)
 
     raise ValueError(f"unsupported source type: {source_type}")
 
@@ -406,6 +501,27 @@ def enrich_with_detail(record, source):
             detail.get("label_value_selector"),
         )
         record.update({k: v for k, v in labeled_values.items() if v})
+
+    inline_labels = detail.get("inline_labels")
+    if inline_labels:
+        selector = inline_labels.get("selector", "strong")
+        fields = inline_labels.get("fields", [])
+        normalized_targets = []
+        for entry in fields:
+            lbl = normalize_text(entry.get("label"))
+            if lbl:
+                normalized_targets.append((lbl, entry.get("field")))
+        
+        for node in soup.select(selector):
+            label_key = normalize_text(node.get_text(" ", strip=True))
+            for target_label, target_field in normalized_targets:
+                if target_label in label_key or label_key in target_label:
+                    full_text = node.parent.get_text(" ", strip=True)
+                    label_raw = node.get_text(" ", strip=True)
+                    value_text = full_text.replace(label_raw, "").strip(" :.-")
+                    if value_text:
+                        record[target_field] = value_text
+                    break
 
     table_selector = detail.get("table_selector")
     if table_selector:
