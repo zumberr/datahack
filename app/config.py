@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     embedding_model: str = "intfloat/multilingual-e5-large"
     embedding_dim: int = 1024
 
-    retrieval_top_k: int = 5
-    retrieval_candidates: int = 10
+    retrieval_top_k: int = 12
+    retrieval_candidates: int = 30
 
     confidence_top1_min: float = 0.32
     confidence_top3_mean_min: float = 0.28
