@@ -38,7 +38,7 @@ cd datahack
 # 2. Crear entorno Python e instalar dependencias
 python -m venv .venv
 # Windows:
-.venv\Scripts\activate
+.venv/Scripts/activate
 # macOS/Linux:
 source .venv/bin/activate
 

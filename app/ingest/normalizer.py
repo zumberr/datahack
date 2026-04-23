@@ -97,6 +97,8 @@ _CATEGORY_CANONICAL: dict[str, str] = {
     "bienestar": "beneficios",
     "perfil": "perfiles",
     "perfiles": "perfiles",
+    "calendario": "calendario",
+    "fechas": "calendario",
     "otros": "otros",
 }
 
@@ -109,6 +111,7 @@ _URL_CATEGORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"/costo|/matricul|/derechos-pecuniarios|/valor", re.I), "costos"),
     (re.compile(r"/bienestar|/beca|/beneficio", re.I), "beneficios"),
     (re.compile(r"/perfil", re.I), "perfiles"),
+    (re.compile(r"/calendario", re.I), "calendario"),
 ]
 
 _KEYWORD_CATEGORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
@@ -119,6 +122,7 @@ _KEYWORD_CATEGORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
      "costos"),
     (re.compile(r"\bperfil ocupacional|\bperfil profesional|\begresad", re.I), "perfiles"),
     (re.compile(r"\bbeca\b|\bbienestar|\bbeneficio\b|\bsubsidio", re.I), "beneficios"),
+    (re.compile(r"\bcalendario\b|\bfecha", re.I), "calendario"),
 ]
 
 # Fields that trigger the rich-metadata enrichment path.
@@ -198,26 +202,43 @@ def _infer_category(url: str, title: str, content: str) -> str:
     return "otros"
 
 
-def _render_table_content(rows: list[dict[str, Any]], table_name: str | None = None) -> str:
-    """Convert a list of dicts (scraped table rows) into a Markdown table string.
+def _render_table_content(rows: list[Any], table_name: str | None = None) -> str:
+    """Convert a list of dicts or list of lists (scraped table rows) into a Markdown table string.
 
     Each dict represents one row; keys become column headers.
+    If rows is a list of lists, it's rendered without headers.
     If `table_name` is provided it is prepended as a heading.
     """
     if not rows:
         return ""
-    # Collect all keys preserving insertion order from first row.
-    headers: list[str] = list(rows[0].keys())
+    
     lines: list[str] = []
     if table_name:
         lines.append(f"## {table_name}")
         lines.append("")
-    # Header row
-    lines.append("| " + " | ".join(headers) + " |")
-    lines.append("| " + " | ".join("---" for _ in headers) + " |")
-    for row in rows:
-        cells = [str(row.get(h, "")).strip() for h in headers]
-        lines.append("| " + " | ".join(cells) + " |")
+
+    if isinstance(rows[0], dict):
+        headers: list[str] = list(rows[0].keys())
+        lines.append("| " + " | ".join(headers) + " |")
+        lines.append("| " + " | ".join("---" for _ in headers) + " |")
+        for row in rows:
+            cells = [str(row.get(h, "")).strip().replace("\n", " ") for h in headers]
+            lines.append("| " + " | ".join(cells) + " |")
+    elif isinstance(rows[0], list):
+        # Determine max columns
+        max_cols = max(len(row) for row in rows if isinstance(row, list))
+        # Create a generic header since Markdown tables require one
+        headers = [f"Col {i+1}" for i in range(max_cols)]
+        lines.append("| " + " | ".join(headers) + " |")
+        lines.append("| " + " | ".join("---" for _ in headers) + " |")
+        for row in rows:
+            if not isinstance(row, list):
+                continue
+            cells = [str(cell).strip().replace("\n", " ") for cell in row]
+            # Pad if necessary
+            cells.extend([""] * (max_cols - len(cells)))
+            lines.append("| " + " | ".join(cells) + " |")
+
     return "\n".join(lines)
 
 
@@ -312,19 +333,19 @@ def _build_posgrado_details_section(data: dict[str, Any]) -> str | None:
 
     bits: list[str] = []
     if isinstance(semesters, str) and semesters.strip():
-        bits.append(f"- Duración: {semesters.strip()}")
+        bits.append(f"- Duración del programa: {semesters.strip()}")
     if isinstance(cost, str) and cost.strip():
-        bits.append(f"- Costo: {cost.strip()}")
+        bits.append(f"- Costo por semestre: {cost.strip()}")
     if isinstance(schedule, str) and schedule.strip():
         bits.append(f"- Horario: {schedule.strip()}")
     if isinstance(credits_, (str, int)) and str(credits_).strip():
-        bits.append(f"- Créditos: {str(credits_).strip()}")
+        bits.append(f"- Número de créditos académicos: {str(credits_).strip()}")
     if isinstance(snies, (str, int)) and str(snies).strip():
         bits.append(f"- Código SNIES: {str(snies).strip()}")
     if isinstance(registro, str) and registro.strip():
-        bits.append(f"- Registro calificado: {registro.strip()}")
+        bits.append(f"- Resolución de registro calificado: {registro.strip()}")
     if isinstance(vigencia, str) and vigencia.strip():
-        bits.append(f"- Vigencia: {vigencia.strip()}")
+        bits.append(f"- Vigencia del registro: {vigencia.strip()}")
 
     if not bits:
         return None
@@ -409,8 +430,8 @@ def normalize_one(data: dict[str, Any]) -> tuple[NormalizedDocument | None, list
 
     content_raw = _pick(data, _ALIASES_CONTENT)
 
-    # Handle table content: list of dicts from table scraper → Markdown text.
-    if isinstance(content_raw, list) and content_raw and isinstance(content_raw[0], dict):
+    # Handle table content: list of dicts or list of lists from table scraper → Markdown text.
+    if isinstance(content_raw, list) and content_raw and (isinstance(content_raw[0], dict) or isinstance(content_raw[0], list)):
         table_name = data.get("table_name") or data.get("title")
         content_raw = _render_table_content(content_raw, table_name)
         warnings.append("table content rendered as Markdown")
