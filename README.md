@@ -78,6 +78,7 @@ Respuesta (abreviada):
 ```json
 {
   "session_id": "6d1a...",
+  "turn_id": 1234,
   "answer": "Pascual Bravo ofrece la Tecnología en Sistematización de Datos [1] y la Tecnología en Electricidad, entre otras. Ambas duran 6 semestres [1][2].",
   "citations": [
     { "id": 1, "url": "https://pascualbravo.edu.co/pregrados/tecnologia-en-sistematizacion-de-datos/", "title": "Tecnología en Sistematización de Datos", "snippet": "..." }
@@ -85,6 +86,8 @@ Respuesta (abreviada):
   "confident": true
 }
 ```
+
+> `turn_id` identifica esta respuesta del bot. El frontend lo reenvía al endpoint `/feedback` cuando el usuario marca pulgar arriba/abajo o "esto no respondió mi pregunta".
 
 **Pregunta fuera de dominio:** el bot no inventa.
 
@@ -222,6 +225,7 @@ El programa forma profesionales capaces de...
 // Response
 {
   "session_id": "uuid",
+  "turn_id": 1234,
   "answer": "...[1][2]",
   "citations": [
     { "id": 1, "url": "...", "title": "...", "snippet": "..." }
@@ -233,6 +237,34 @@ El programa forma profesionales capaces de...
 - Pasa `session_id: null` en el primer mensaje; guarda el UUID devuelto y reúsalo en los siguientes.
 - `confident: false` → el backend no encontró información suficientemente clara; muestra la `answer` tal cual (ya trae redirección institucional).
 - Los `[N]` en `answer` corresponden a los `id` de `citations` — úsalos para renderizar enlaces inline.
+- `turn_id` identifica esta respuesta del bot; guárdalo para enviarlo con `/feedback`.
+
+### `POST /feedback`
+
+Cierra el loop de calidad. El usuario marca si la respuesta le sirvió.
+
+```json
+// Request
+{
+  "session_id": "uuid",
+  "turn_id": 1234,
+  "rating": "not_helpful",
+  "reason": "No mencionó el costo nocturno"
+}
+
+// Response
+{ "feedback_id": 42 }
+```
+
+| `rating` | Cuándo mostrarlo | A quién ayuda |
+|---|---|---|
+| `helpful` | Pulgar arriba | Señal positiva |
+| `not_helpful` | "Esto no respondió mi pregunta" | Retrieval / cobertura |
+| `wrong` | "Esta información es incorrecta" | Prompts (alucinación candidata) |
+| `incomplete` | "Me faltó información" | Retrieval / prompt |
+| `missing_info` | El bot dijo "no tengo info" pero debería | Cobertura del corpus |
+
+Devuelve `404` si `turn_id` no pertenece a la sesión o no es un turno del asistente.
 
 ### `POST /sessions`
 
@@ -272,17 +304,42 @@ Dos mecanismos combinados:
 
 ---
 
+## Feedback loop — cómo mejora el bot con cada conversación
+
+Cada respuesta del `/chat` graba en Postgres la metadata de ese turno (`turn_metadata`): query reformulado, chunks recuperados, decisión del gate. Cuando el usuario envía feedback, `scripts/analyze_feedback.py` lo cruza con esa metadata y produce tres CSVs accionables:
+
+```bash
+python scripts/analyze_feedback.py
+python scripts/analyze_feedback.py --since 2026-04-01
+```
+
+| Archivo | Criterio | Acción |
+|---|---|---|
+| `data/feedback/corpus_gaps.csv` | `missing_info` ∪ (`not_helpful` ∧ `confident=false`) | Páginas que faltan en el corpus → agregar a `mappings.json` y re-ingestar |
+| `data/feedback/hallucination_candidates.csv` | `wrong` ∧ `confident=true` | Gate pasó pero LLM alucinó → revisar `SYSTEM_PROMPT` / subir umbrales |
+| `data/feedback/retrieval_misses.csv` | (`not_helpful` ∨ `incomplete`) ∧ `confident=true` | Chunks insuficientes → negativos para re-ranker o tunear RRF |
+
+El script también imprime calibración del gate: si `confident=false` produce muchos `missing_info`, el gate está siendo demasiado estricto → bajar `CONFIDENCE_SIGNALS_REQUIRED` en `.env`.
+
+> **Migración DB**: si el contenedor ya está corriendo, aplica el schema con:
+> ```bash
+> docker exec -i bravobot-postgres psql -U bravobot -d bravobot < scripts/init_db.sql
+> ```
+
+---
+
 ## Tests
 
 ```bash
 pytest -q
 ```
 
-41 tests cubren:
+51 tests cubren:
 - Normalizador (aliases, dominio, HTML, dedupe, inferencia de categoría, canonicalización, formato real del scraper con `price_table`/`presentation`/metadata rica, construcción desde metadata sin `presentation`)
 - Chunker (secciones separadas, heading path, no fusión entre secciones)
 - Gate de confianza (preguntas on/off-domain, numéricas, comparativas)
 - Extracción de citaciones
+- Validación de modelos de feedback (ratings válidos, turn_id positivo, límite de `reason`)
 
 ---
 
