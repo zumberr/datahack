@@ -3,54 +3,72 @@
     "url": "https://pascualbravo.edu.co/pregrados/ingenieria-mecanica/",
     "title": "Ingeniería Mecánica",
     "category": "pregrado",
+    "schedule": "Diurno (6:00 a.m. - 2:00 p.m.)",
+    "credits": "165",
     "content": "## Presentación\nEl programa de Ingeniería Mecánica forma profesionales capaces de diseñar, construir y mantener sistemas mecánicos. Duración: 10 semestres. Título otorgado: Ingeniero(a) Mecánico(a).\n\n## Perfil ocupacional\nEl egresado podrá desempeñarse en industrias metalmecánicas, empresas de manufactura, plantas de generación de energía, consultoría en diseño mecánico y proyectos de mantenimiento industrial.\n\n## Requisitos de admisión\n- Ser bachiller o estar próximo a graduarse.\n- Resultados de las Pruebas Saber 11 (ICFES).\n- Formulario de inscripción diligenciado.\n- Pago de los derechos de inscripción.\n\n## Plan de estudios\nEl programa combina ciencias básicas, ciencias de la ingeniería y componentes profesionales con énfasis en diseño, manufactura, materiales y gestión de proyectos."
   },
   {
     "url": "https://pascualbravo.edu.co/pregrados/tecnologia-en-sistematizacion-de-datos/",
     "title": "Tecnología en Sistematización de Datos",
     "category": "pregrado",
+    "schedule": "Diurno y Nocturno",
+    "credits": "95",
     "content": "## Presentación\nLa Tecnología en Sistematización de Datos forma profesionales en desarrollo de software, bases de datos y sistemas de información. Duración: 6 semestres.\n\n## Perfil ocupacional\nEl tecnólogo puede desempeñarse como desarrollador de aplicaciones, administrador de bases de datos, analista de datos o soporte técnico especializado en pymes y grandes empresas.\n\n## Requisitos de admisión\nBachiller, Pruebas Saber 11, formulario de inscripción y pago de derechos de inscripción."
   },
   {
     "url": "https://pascualbravo.edu.co/pregrados/ingenieria-industrial/",
     "title": "Ingeniería Industrial",
     "category": "pregrado",
+    "schedule": "Diurno y Nocturno",
+    "credits": "160",
     "content": "## Presentación\nIngeniería Industrial forma profesionales que optimizan procesos productivos y de servicios. Duración: 10 semestres.\n\n## Perfil ocupacional\nEl ingeniero industrial puede desempeñarse en áreas de producción, logística, calidad, recursos humanos y gestión de proyectos tanto en el sector manufacturero como en servicios.\n\n## Requisitos de admisión\nBachiller o próximo a graduarse, resultados Saber 11, formulario y pago de inscripción."
   },
   {
     "url": "https://pascualbravo.edu.co/pregrados/ingenieria-de-software/",
     "title": "Ingeniería de Software",
     "category": "pregrado",
+    "schedule": "Diurno (6:00 a.m. - 2:00 p.m.)",
+    "credits": "160",
     "content": "## Presentación\nEl programa de Ingeniería de Software forma profesionales capaces de analizar, diseñar, construir y mantener sistemas de software de calidad aplicando metodologías ágiles, arquitecturas modernas y buenas prácticas de desarrollo. Duración: 9 semestres. Título otorgado: Ingeniero(a) de Software.\n\n## Perfil ocupacional\nEl egresado puede desempeñarse como desarrollador de software, ingeniero de aplicaciones, arquitecto de software, líder técnico, analista de sistemas, ingeniero DevOps o consultor en transformación digital, en empresas del sector tecnológico, financiero, industrial y de servicios.\n\n## Requisitos de admisión\n- Ser bachiller o estar próximo a graduarse.\n- Resultados de las Pruebas Saber 11 (ICFES).\n- Formulario de inscripción diligenciado.\n- Pago de los derechos de inscripción.\n\n## Plan de estudios\nEl programa integra fundamentos de ciencias básicas, ingeniería de software, bases de datos, desarrollo web y móvil, inteligencia artificial, seguridad informática, pruebas de software y gestión de proyectos de TI."
   },
   {
     "url": "https://pascualbravo.edu.co/pregrados/ingenieria-electrica/",
     "title": "Ingeniería Eléctrica",
     "category": "pregrado",
+    "schedule": "Diurno (6:00 a.m. - 2:00 p.m.)",
+    "credits": "170",
     "content": "## Presentación\nEl programa de Ingeniería Eléctrica forma profesionales capaces de diseñar, operar y mantener sistemas de generación, transmisión y distribución de energía eléctrica. Duración: 10 semestres. Título otorgado: Ingeniero(a) Eléctrico(a).\n\n## Perfil ocupacional\nEl egresado puede desempeñarse en empresas de energía, subestaciones eléctricas, diseño de instalaciones industriales, mantenimiento eléctrico, proyectos de iluminación y automatización.\n\n## Requisitos de admisión\nBachiller, resultados Saber 11, formulario y pago de inscripción."
   },
   {
     "url": "https://pascualbravo.edu.co/pregrados/ingenieria-electronica/",
     "title": "Ingeniería Electrónica",
     "category": "pregrado",
+    "schedule": "Diurno (6:00 a.m. - 2:00 p.m.)",
+    "credits": "165",
     "content": "## Presentación\nEl programa de Ingeniería Electrónica forma profesionales capaces de diseñar e implementar sistemas electrónicos, de control, instrumentación y comunicaciones. Duración: 10 semestres. Título otorgado: Ingeniero(a) Electrónico(a).\n\n## Perfil ocupacional\nEl egresado puede trabajar en automatización industrial, robótica, telecomunicaciones, sistemas embebidos, dispositivos médicos y proyectos de I+D.\n\n## Requisitos de admisión\nBachiller, resultados Saber 11, formulario y pago de inscripción."
   },
   {
     "url": "https://pascualbravo.edu.co/pregrados/ingenieria-en-telecomunicaciones/",
     "title": "Ingeniería en Telecomunicaciones",
     "category": "pregrado",
+    "schedule": "Diurno (6:00 a.m. - 2:00 p.m.)",
+    "credits": "160",
     "content": "## Presentación\nEl programa de Ingeniería en Telecomunicaciones forma profesionales capaces de diseñar, implementar y gestionar redes de datos, voz y video, así como sistemas de transmisión inalámbrica y fibra óptica. Duración: 10 semestres. Título otorgado: Ingeniero(a) en Telecomunicaciones.\n\n## Perfil ocupacional\nEl egresado puede desempeñarse en operadores de telecomunicaciones, empresas de redes, proveedores de servicios de internet, centros de datos y proyectos de conectividad.\n\n## Requisitos de admisión\nBachiller, resultados Saber 11, formulario y pago de inscripción."
   },
   {
     "url": "https://pascualbravo.edu.co/pregrados/tecnologia-en-electronica/",
     "title": "Tecnología en Electrónica",
     "category": "pregrado",
+    "schedule": "Diurno (6:00 a.m. - 2:00 p.m.)",
+    "credits": "100",
     "content": "## Presentación\nLa Tecnología en Electrónica forma profesionales capaces de instalar, configurar y mantener sistemas electrónicos, circuitos analógicos y digitales, y dispositivos de control. Duración: 6 semestres. Título otorgado: Tecnólogo(a) en Electrónica.\n\n## Perfil ocupacional\nEl tecnólogo puede trabajar en mantenimiento electrónico, soporte técnico, instalación de sistemas de control y automatización de bajo nivel.\n\n## Requisitos de admisión\nBachiller, resultados Saber 11, formulario y pago de inscripción."
   },
   {
     "url": "https://pascualbravo.edu.co/pregrados/tecnologia-en-construcciones-civiles/",
     "title": "Tecnología en Construcciones Civiles",
     "category": "pregrado",
+    "schedule": "Diurno (6:00 a.m. - 2:00 p.m.)",
+    "credits": "100",
     "content": "## Presentación\nLa Tecnología en Construcciones Civiles forma profesionales capaces de participar en la planeación, ejecución y control de obras civiles, aplicando normativas técnicas y de calidad. Duración: 6 semestres. Título otorgado: Tecnólogo(a) en Construcciones Civiles.\n\n## Perfil ocupacional\nEl tecnólogo puede desempeñarse en empresas constructoras, interventoría de obra, control de materiales, topografía y gestión de proyectos de infraestructura.\n\n## Requisitos de admisión\nBachiller, resultados Saber 11, formulario y pago de inscripción."
   }
 ]

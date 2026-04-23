@@ -11,6 +11,8 @@
     "program_title": "Ingeniero (a) de Materiales",
     "inscriptions": "Del 2 de marzo al 15 de junio de 2026",
     "class_start": "Agosto de 2026",
+    "schedule": "Diurno (6:00 a.m. - 2:00 p.m.)",
+    "credits": "170",
     "price_table": [
       { "Estrato": "1", "Valor": "$1.800.000" },
       { "Estrato": "2", "Valor": "$2.100.000" },
@@ -33,6 +35,8 @@
     "inscriptions": "Del 2 de marzo al 15 de junio de 2026",
     "class_start": "Agosto de 2026",
     "semesters": "6 semestres",
+    "schedule": "Diurno y Nocturno",
+    "credits": "96",
     "presentation": "La Tecnología en Producción Industrial forma profesionales capaces de planear, operar y controlar sistemas productivos industriales aplicando herramientas de gestión de la calidad, productividad y mejora continua. Duración: 6 semestres. El tecnólogo puede desempeñarse en plantas de manufactura, áreas de producción, logística y control de procesos.",
     "price_table": [
       { "Estrato": "1", "Valor": "$1.200.000" },
