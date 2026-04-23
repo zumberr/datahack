@@ -168,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
         all_chunks.extend(chunk_document(doc))
     logger.info("Chunked into %d passages across %d documents", len(all_chunks), len(docs))
 
-    texts = [f"{c.section_title}\n\n{c.content}" for c in all_chunks]
+    texts = [f"{c.title}\n{c.section_title}\n\n{c.content}" for c in all_chunks]
     logger.info("Embedding %d chunks (first run may download the model)...", len(texts))
     embeddings = embed_passages(texts)
     logger.info("Embedded shape=%s", embeddings.shape)
