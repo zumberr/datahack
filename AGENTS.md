@@ -156,6 +156,9 @@ python -m venv .venv && .venv/Scripts/activate   # Windows
 pip install -e ".[dev]"
 cp .env.example .env   # editar con tu key
 
+# Scraper (genera JSON procesados en data/processed desde data/mappings.json)
+python scripts/scraper.py
+
 # DB (puerto 5433 en host para evitar conflicto con Postgres local)
 docker compose up -d
 docker compose down    # stop
